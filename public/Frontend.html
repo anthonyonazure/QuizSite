@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Muscle Testing Quiz</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #333;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        #message {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Muscle Testing Quiz</h1>
+        <div id="login-register">
+            <h2>Login or Register</h2>
+            <form id="user-form">
+                <input type="text" id="firstName" placeholder="First Name">
+                <input type="text" id="lastName" placeholder="Last Name">
+                <input type="text" id="redditHandle" placeholder="Reddit Handle" required>
+                <input type="password" id="password" placeholder="Password" required>
+                <button type="submit">Login/Register</button>
+            </form>
+        </div>
+        <div id="message"></div>
+        <div id="quiz-section" style="display: none;">
+            <h2>Quiz</h2>
+            <p>Use muscle testing to determine if the statement is true or false.</p>
+            <p id="question"></p>
+            <button id="true-btn">True</button>
+            <button id="false-btn">False</button>
+            <button id="stop-quiz">Stop Quiz</button>
+        </div>
+        <div id="leaderboard">
+            <h2>Leaderboard</h2>
+            <ul id="leaderboard-list"></ul>
+        </div>
+        <div id="message"></div>
+    </div>
+    <script>
+        const API_URL = 'http://localhost:5000'; // Update this if your backend is on a different URL
+        let token = localStorage.getItem('token');
+        let currentQuestion = null;
+        let questionCount = 0;
+        let correctAnswers = 0;
+
+        const userForm = document.getElementById('user-form');
+        const quizSection = document.getElementById('quiz-section');
+        const questionElement = document.getElementById('question');
+        const trueBtn = document.getElementById('true-btn');
+        const falseBtn = document.getElementById('false-btn');
+        const stopQuizBtn = document.getElementById('stop-quiz');
+        const leaderboardList = document.getElementById('leaderboard-list');
+        const messageDiv = document.getElementById('message');
+
+        userForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const firstName = document.getElementById('firstName').value;
+            const lastName = document.getElementById('lastName').value;
+            const redditHandle = document.getElementById('redditHandle').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch(`${API_URL}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ redditHandle, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    token = data.token;
+                    localStorage.setItem('token', token);
+                    document.getElementById('login-register').style.display = 'none';
+                    quizSection.style.display = 'block';
+                    startQuiz();
+                } else {
+                    // If login fails, try to register
+                    const registerResponse = await fetch(`${API_URL}/register`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ firstName, lastName, redditHandle, password })
+                    });
+
+                    if (registerResponse.ok) {
+                        showMessage('Registration successful. Please log in.', 'success');
+                    } else {
+                        showMessage('Registration failed. ' + data.error, 'error');
+                    }
+                }
+            } catch (error) {
+                console.error('Registration error:', error);
+                showMessage('An error occurred during registration.', 'error', `Details: ${error.message}`);
+            }
+        });
+
+        async function startQuiz() {
+            questionCount = 0;
+            correctAnswers = 0;
+            await getQuestion();
+        }
+
+        async function getQuestion() {
+            try {
+                const response = await fetch(`${API_URL}/questions`, {
+                    headers: { 'Authorization': token }
+                });
+                const questions = await response.json();
+                if (questions.length > 0) {
+                    currentQuestion = questions[Math.floor(Math.random() * questions.length)];
+                    questionElement.textContent = currentQuestion.statement;
+                    questionCount++;
+                } else {
+                    showMessage('No more questions available.', 'error');
+                    stopQuiz();
+                }
+            } catch (error) {
+                showMessage('Failed to get question. ' + error, 'error');
+            }
+        }
+
+        async function submitAnswer(answer) {
+            if (currentQuestion.answer === answer) {
+                correctAnswers++;
+            }
+            await getQuestion();
+        }
+
+        async function stopQuiz() {
+            quizSection.style.display = 'none';
+            try {
+                const response = await fetch(`${API_URL}/submit-quiz`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': token,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ questionsAnswered: questionCount, correctAnswers })
+                });
+
+                if (response.ok) {
+                    const score = (correctAnswers / questionCount * 100).toFixed(2);
+                    showMessage(`Quiz finished! Your score: ${score}%`, 'success');
+                    updateLeaderboard();
+                } else {
+                    showMessage('Failed to submit quiz results.', 'error');
+                }
+            } catch (error) {
+                showMessage('An error occurred while submitting quiz results.', 'error');
+            }
+        }
+
+        async function updateLeaderboard() {
+            try {
+                const response = await fetch(`${API_URL}/leaderboard`);
+                const leaderboard = await response.json();
+                leaderboardList.innerHTML = '';
+                leaderboard.forEach((entry, index) => {
+                    const li = document.createElement('li');
+                    li.textContent = `${index + 1}. ${entry.name}: ${entry.score}%`;
+                    leaderboardList.appendChild(li);
+                });
+            } catch (error) {
+                console.error('Leaderboard update error:', error);
+                showMessage('Failed to update leaderboard.', 'error', `Details: ${error.message}`);
+            }
+        }
+
+        function showMessage(message, type, details = '') {
+            messageDiv.innerHTML = `<strong>${message}</strong>${details ? '<br>' + details : ''}`;
+            messageDiv.className = type;
+            console.log(`${type.toUpperCase()}: ${message}`, details);
+        }
+
+        trueBtn.addEventListener('click', () => submitAnswer(true));
+        falseBtn.addEventListener('click', () => submitAnswer(false));
+        stopQuizBtn.addEventListener('click', stopQuiz);
+
+        // Initial leaderboard update
+        updateLeaderboard();
+    </script>
+</body>
+</html>
