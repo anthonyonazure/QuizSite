@@ -104,9 +104,13 @@
         <div id="quiz-section" style="display: none;">
             <h2>Quiz</h2>
             <p>Use muscle testing to determine if the statement is true or false.</p>
-            <button id="true-button" class="button button-primary">True</button>
-            <button id="false-button" class="button button-secondary">False</button>
-            <button id="stop-quiz-button" class="button button-danger">Stop Quiz</button>
+            <div id="question-container">
+                <button id="start-quiz-button">Start Quiz</button>
+                <h3>Question <span id="question-number"></span></h3>
+                <button id="true-button">True</button>
+                <button id="false-button">False</button>
+            </div>
+            <button id="stop-quiz">Stop Quiz</button>
         </div>
 
         <div id="leaderboard">
@@ -136,6 +140,8 @@
             const leaderboard = document.getElementById('leaderboard');
 
             let csrfToken;
+            let currentQuestions = [];
+            let currentQuestionIndex = 0;
 
             // Fetch CSRF token when the page loads
             fetch('/api/csrf-token')
@@ -251,6 +257,78 @@
                 }
             }
 
+            async function startQuiz() {
+                try {
+                    const response = await fetch('/api/quiz/questions', {
+                        headers: {
+                            'Authorization': `Bearer ${userToken}`,
+                            'CSRF-Token': csrfToken
+                        }
+                    });
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch questions');
+                    }
+                    currentQuestions = await response.json();
+                    currentQuestionIndex = 0;
+                    document.getElementById('quiz-section').style.display = 'block';
+                    showNextQuestion();
+                } catch (error) {
+                    console.error('Error starting quiz:', error);
+                    alert('Failed to start quiz. Please try again.');
+                }
+            }
+            
+            function showNextQuestion() {
+                if (currentQuestionIndex < currentQuestions.length) {
+                    document.getElementById('question-number').textContent = currentQuestionIndex + 1;
+                    // The actual question text is not displayed
+                } else {
+                    finishQuiz();
+                }
+            }
+            
+            function answerQuestion(answer) {
+                currentQuestions[currentQuestionIndex].userAnswer = answer;
+                currentQuestionIndex++;
+                showNextQuestion();
+            }
+            
+            function finishQuiz() {
+                const answers = currentQuestions.map(q => ({
+                    questionId: q.id,
+                    userAnswer: q.userAnswer
+                }));
+            
+                fetch('/api/quiz/submit', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${userToken}`,
+                        'CSRF-Token': csrfToken
+                    },
+                    body: JSON.stringify({ answers })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    alert(`Quiz completed! You got ${data.correctAnswers} out of ${data.totalQuestions} correct.`);
+                    document.getElementById('quiz-section').style.display = 'none';
+                    loadLeaderboard(); // Assuming you have this function to update the leaderboard
+                })
+                .catch(error => {
+                    console.error('Error submitting quiz:', error);
+                    alert('Failed to submit quiz. Please try again.');
+                });
+            }
+            
+
+            // function to handle token exipration 
+            function handleTokenExpiration(error) {
+                if (error.message.includes('token expired')) {
+                  alert('Your session has expired. Please log in again.');
+                  window.location.href = '/admin-login'; // Redirect to admin login page
+                }
+              }
+
             function showQuizSection() {
                 authForm.style.display = 'none';
                 leaderboard.style.display = 'none';
@@ -287,6 +365,10 @@
             // Fetch leaderboard on page load
             fetchLeaderboard();
         });
+        document.getElementById('true-button').addEventListener('click', () => answerQuestion(true));
+        document.getElementById('false-button').addEventListener('click', () => answerQuestion(false));
+        document.getElementById('stop-quiz').addEventListener('click', finishQuiz);
+        document.getElementById('start-quiz-button').addEventListener('click', startQuiz);
     </script>
 </body>
 </html>

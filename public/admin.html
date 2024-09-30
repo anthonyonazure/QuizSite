@@ -161,6 +161,8 @@
                     <!-- Question data will be populated here -->
                 </tbody>
             </table>
+
+            <button id="logout-button">Logout</button>
         </div>
     </div>
 
@@ -375,36 +377,38 @@
         }
     
         async function loadQuestions() {
-            fetch('/api/admin/questions', {
-              method: 'GET',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': csrfToken // Make sure you have the CSRF token
-              },
-              credentials: 'include' // This is important for including the session cookie
-            })
-            .then(response => response.json())
-            .then(questions => {
-              // Update the questions table with the fetched data
-              const questionTable = document.querySelector('#question-table tbody');
-              questionTable.innerHTML = ''; // Clear existing rows
-              questions.forEach(question => {
-                const row = `
-                  <tr>
-                    <td>${question.id}</td>
-                    <td>${question.statement}</td>
-                    <td>${question.answer ? 'True' : 'False'}</td>
-                    <td>
-                      <button onclick="editQuestion(${question.id})">Edit</button>
-                      <button onclick="deleteQuestion(${question.id})">Delete</button>
-                    </td>
-                  </tr>
-                `;
-                questionTable.innerHTML += row;
-              });
-            })
-            .catch(error => console.error('Error loading questions:', error));
-          }
+            try {
+                const response = await fetch('/api/admin/questions', {
+                    headers: { 
+                        'Authorization': `Bearer ${adminToken}`,
+                        'CSRF-Token': csrfToken
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const questions = await response.json();
+                const questionTable = document.querySelector('#question-table tbody');
+                questionTable.innerHTML = '';
+                questions.forEach(question => {
+                    const row = `
+                        <tr>
+                            <td>${question.id}</td>
+                            <td>${question.statement}</td>
+                            <td>${question.answer ? 'True' : 'False'}</td>
+                            <td>
+                                <button onclick="editQuestion(${question.id})">Edit</button>
+                                <button onclick="deleteQuestion(${question.id})">Delete</button>
+                            </td>
+                        </tr>
+                    `;
+                    questionTable.innerHTML += row;
+                });
+            } catch (error) {
+                console.error('Error loading questions:', error);
+                alert('Failed to load questions. Please try again.');
+            }
+        }
     
         document.getElementById('add-question-form').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -521,21 +525,37 @@
         }
     
         // Function to check if admin is logged in and load data
-        function checkAdminLoginStatus() {
+        async function checkAdminLoginStatus() {
             adminToken = localStorage.getItem('adminToken');
             console.log('Stored token in localStorage:', adminToken);
             if (adminToken) {
-                console.log('Admin token found in local storage');
-                document.getElementById('admin-login').style.display = 'none';
-                document.getElementById('admin-panel').style.display = 'block';
-                loadUsers();
-                loadQuestions();
+                try {
+                    const response = await fetch('/api/admin/verify-token', {
+                        headers: { 
+                            'Authorization': `Bearer ${adminToken}`,
+                            'CSRF-Token': csrfToken
+                        }
+                    });
+                    if (response.ok) {
+                        console.log('Admin token verified');
+                        document.getElementById('admin-login').style.display = 'none';
+                        document.getElementById('admin-panel').style.display = 'block';
+                        loadUsers();
+                        loadQuestions();
+                    } else {
+                        throw new Error('Invalid token');
+                    }
+                } catch (error) {
+                    console.error('Token verification failed:', error);
+                    logout();
+                }
             } else {
                 console.log('No admin token found in local storage');
                 document.getElementById('admin-login').style.display = 'block';
                 document.getElementById('admin-panel').style.display = 'none';
             }
         }
+
         function logout() {
             adminToken = '';
             localStorage.removeItem('adminToken');
@@ -543,54 +563,66 @@
             document.getElementById('admin-panel').style.display = 'none';
             console.log('Logged out');
         }
-        
-        // Add a logout button to your HTML
-        // <button class="logout()">Logout</button>
-            
-        // Check admin login status when page loads
-        checkAdminLoginStatus();
+
+        async function refreshCSRFToken() {
+            try {
+                const response = await fetch('/api/csrf-token');
+                const data = await response.json();
+                csrfToken = data.csrfToken;
+                console.log('CSRF token refreshed');
+            } catch (error) {
+                console.error('Error refreshing CSRF token:', error);
+            }
+        }
 
         document.getElementById('add-user-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const formData = {
-              firstName: document.getElementById('new-firstName').value,
-              lastName: document.getElementById('new-lastName').value,
-              redditHandle: document.getElementById('new-redditHandle').value,
-              email: document.getElementById('new-email').value,
-              password: document.getElementById('new-password').value,
-              isAdmin: document.getElementById('new-isAdmin').checked
+                firstName: document.getElementById('new-firstName').value,
+                lastName: document.getElementById('new-lastName').value,
+                redditHandle: document.getElementById('new-redditHandle').value,
+                email: document.getElementById('new-email').value,
+                password: document.getElementById('new-password').value,
+                isAdmin: document.getElementById('new-isAdmin').checked
             };
-          
-            try {
-              const response = await fetch('/api/admin/users', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'CSRF-Token': csrfToken
-                },
-                body: JSON.stringify(formData)
-              });
-          
-              const data = await response.json();
-              if (response.ok) {
-                alert('User added successfully');
-                loadUsers(); // Refresh the user list
-              } else {
-                alert(`Error: ${data.error || 'Failed to add user'}`);
-              }
-            } catch (error) {
-              console.error('Error adding user:', error);
-              alert('An error occurred while adding the user');
-            }
-          });
 
-          document.addEventListener('click', function(e) {
-            if (e.target.classList.contains('edit-user')) {
-              editUser(e.target.getAttribute('data-id'));
-            } else if (e.target.classList.contains('delete-user')) {
-              deleteUser(e.target.getAttribute('data-id'));
+            try {
+                const response = await fetch('/api/admin/users', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${adminToken}`,
+                        'CSRF-Token': csrfToken
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    alert('User added successfully');
+                    loadUsers(); // Refresh the user list
+                    document.getElementById('add-user-form').reset();
+                } else {
+                    alert(`Error: ${data.error || 'Failed to add user'}`);
+                }
+            } catch (error) {
+                console.error('Error adding user:', error);
+                alert('An error occurred while adding the user');
             }
-          });
+        });
+
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('edit-user')) {
+                editUser(e.target.getAttribute('data-id'));
+            } else if (e.target.classList.contains('delete-user')) {
+                deleteUser(e.target.getAttribute('data-id'));
+            }
+        });
+
+        // Check admin login status when page loads
+        checkAdminLoginStatus();
+
+        document.getElementById('logout-button').addEventListener('click', logout);
     </script>
 </body>
 </html>

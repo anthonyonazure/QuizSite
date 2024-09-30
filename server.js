@@ -181,37 +181,22 @@ const verifyToken = (req, res, next) => {
 };
 
 // Middleware to verify admin token
-const verifyAdminToken = (req, res, next) => {
-  console.log('Verifying admin token');
-  console.log('All headers:', req.headers);
-  const authHeader = req.headers['authorization'];
-  console.log('Authorization header:', authHeader);
-  let token = authHeader && authHeader.split(' ')[1];
-  if (!token && req.cookies.adminToken) {
-      token = req.cookies.adminToken;
-      console.log('Token found in cookie');
-  }
-  console.log('Extracted token:', token);
-
-  if (!token) {
-      console.log('No token provided');
-      return res.status(401).json({ error: 'Access denied. No token provided.' });
-  }
+const verifyAdminToken = async (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Access denied' });
 
   try {
-      const decoded = jwt.verify(token, JWT_SECRET);
-      req.user = decoded;
-      if (!decoded.isAdmin) {
-          console.log('Non-admin token used');
-          return res.status(403).json({ error: 'Access denied. Admin rights required.' });
-      }
-      console.log('Admin token verified successfully');
-      next();
+    const verified = jwt.verify(token, 'YOUR_ADMIN_SECRET_KEY');
+    if (!verified.isAdmin) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    req.user = verified;
+    next();
   } catch (error) {
-      console.error('Admin token verification error:', error);
-      res.status(400).json({ error: 'Invalid token', details: error.message });
+    console.error('Admin token verification error:', error);
+    res.status(400).json({ error: 'Invalid token', details: error.message });
   }
-};;
+};
 
 app.use((req, res, next) => {
   res.setHeader(
@@ -493,32 +478,23 @@ app.get('/api/csrf-token', (req, res) => {
 // Admin login route with input validation
 app.post('/api/admin/login', async (req, res) => {
   const { username, password } = req.body;
-  console.log('Admin login attempt:', { username });
 
   try {
-      const user = await User.findOne({ where: { redditHandle: username, isAdmin: true } });
-      if (!user) {
-          console.log('Admin not found:', username);
-          return res.status(400).json({ error: 'Admin not found' });
-      }
+    const user = await User.findOne({ where: { redditHandle: username, isAdmin: true } });
+    if (!user) {
+      return res.status(400).json({ error: 'Admin not found' });
+    }
 
-      const validPassword = await bcrypt.compare(password, user.password);
-      if (!validPassword) {
-          console.log('Invalid password for admin:', username);
-          return res.status(400).json({ error: 'Invalid password' });
-      }
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
+      return res.status(400).json({ error: 'Invalid password' });
+    }
 
-      const token = jwt.sign(
-          { id: user.id, isAdmin: user.isAdmin },
-          JWT_SECRET,
-          { expiresIn: '1h' }
-      );
-      res.cookie('adminToken', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
-      console.log('Admin logged in successfully:', username);
-      res.json({ message: 'Admin logged in successfully', token, isAdmin: true });
+    const token = jwt.sign({ id: user.id, isAdmin: true }, 'YOUR_ADMIN_SECRET_KEY', { expiresIn: '1h' });
+    res.json({ token, message: 'Admin logged in successfully' });
   } catch (error) {
-      console.error('Admin login error:', error);
-      res.status(500).json({ error: 'Server error', details: error.message });
+    console.error('Admin login error:', error);
+    res.status(500).json({ error: 'Server error', details: error.message });
   }
 });
 
@@ -627,17 +603,15 @@ app.delete('/api/admin/questions/:id', verifyAdminToken, async (req, res) => {
 // Get questions for quiz (non-admin, requires regular user token)
 app.get('/api/quiz/questions', verifyToken, async (req, res) => {
   try {
-    console.log('Fetching questions for quiz');
-    const questions = await Question.findAll({
-      order: Sequelize.literal('RANDOM()'),
-      limit: 10,
-      attributes: ['id', 'statement']
-    });
-    console.log('Questions fetched:', questions);
-    res.json(questions);
+      const questions = await Question.findAll({
+          order: Sequelize.literal('RANDOM()'),
+          limit: 10,
+          attributes: ['id'] // Only send the question ID, not the statement
+      });
+      res.json(questions);
   } catch (error) {
-    console.error('Get quiz questions error:', error);
-    res.status(500).json({ error: 'Server error', details: error.message });
+      console.error('Get quiz questions error:', error);
+      res.status(500).json({ error: 'Server error', details: error.message });
   }
 });
 
@@ -645,36 +619,26 @@ app.get('/api/quiz/questions', verifyToken, async (req, res) => {
 app.post('/api/quiz/submit', verifyToken, async (req, res) => {
   const { answers } = req.body; // answers should be an array of { questionId, userAnswer }
   try {
-    const user = await User.findByPk(req.user.id);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    let correctAnswers = 0;
-    for (let answer of answers) {
-      const question = await Question.findByPk(answer.questionId);
-      if (question && question.answer === answer.userAnswer) {
-        correctAnswers++;
+      let correctAnswers = 0;
+      for (let answer of answers) {
+          const question = await Question.findByPk(answer.questionId);
+          if (question && question.answer === answer.userAnswer) {
+              correctAnswers++;
+          }
       }
-    }
-    
-    await user.increment('quizzesTaken');
-    await user.increment('totalCorrect', { by: correctAnswers });
-    await user.reload(); // Reload the user to get updated values
+      
+      const user = await User.findByPk(req.user.id);
+      await user.increment('quizzesTaken');
+      await user.increment('totalCorrect', { by: correctAnswers });
 
-    const quizPercentage = ((correctAnswers / answers.length) * 100).toFixed(2);
-    const overallPercentage = ((user.totalCorrect / (user.quizzesTaken * 10)) * 100).toFixed(2);
-
-    res.json({ 
-      correctAnswers, 
-      totalQuestions: answers.length,
-      quizPercentage: quizPercentage,
-      overallPercentage: overallPercentage,
-      message: 'Quiz submitted successfully'
-    });
+      res.json({ 
+          correctAnswers, 
+          totalQuestions: answers.length,
+          message: 'Quiz submitted successfully'
+      });
   } catch (error) {
-    console.error('Submit quiz error:', error);
-    res.status(500).json({ error: 'Server error', details: error.message });
+      console.error('Submit quiz error:', error);
+      res.status(500).json({ error: 'Server error', details: error.message });
   }
 });
 
