@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Request Password Reset</title>
+    <style>
+        /* Add your styles here */
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Request Password Reset</h1>
+        <form id="request-reset-form">
+            <input type="email" id="email" placeholder="Enter your email address" required>
+            <input type="hidden" id="csrf-token" name="_csrf">
+            <button type="submit">Request Reset</button>
+        </form>
+        <div id="message"></div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('request-reset-form');
+            const emailInput = document.getElementById('email');
+            const csrfToken = document.getElementById('csrf-token');
+            const messageDiv = document.getElementById('message');
+
+            // Fetch CSRF token
+            fetch('/api/csrf-token')
+                .then(response => response.json())
+                .then(data => {
+                    csrfToken.value = data.csrfToken;
+                });
+
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                fetch('/api/request-reset', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'CSRF-Token': csrfToken.value
+                    },
+                    body: JSON.stringify({ email: emailInput.value })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    messageDiv.textContent = data.message || data.error;
+                })
+                .catch(error => {
+                    messageDiv.textContent = 'An error occurred. Please try again.';
+                });
+            });
+        });
+    </script>
+</body>
+</html>

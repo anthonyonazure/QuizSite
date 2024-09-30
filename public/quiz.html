@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Muscle Testing Quiz</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        #quiz-container {
+            margin-top: 20px;
+        }
+        .question {
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        .true {
+            background-color: #28a745;
+            color: white;
+        }
+        .false {
+            background-color: #dc3545;
+            color: white;
+        }
+        .selected {
+            opacity: 0.7;
+            box-shadow: 0 0 5px #333;
+        }
+        #result {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome to the Muscle Testing Quiz</h1>
+        <div id="quiz-container">
+            <!-- Quiz questions will be loaded here -->
+        </div>
+        <div id="result"></div>
+        <button id="submit-quiz" style="display: none;">Submit Quiz</button>
+    </div>
+
+    <script>
+        let currentQuestions = [];
+        let userAnswers = [];
+        let csrfToken;
+        
+        async function getCsrfToken() {
+            const response = await fetch('/api/csrf-token');
+            const data = await response.json();
+            csrfToken = data.csrfToken;
+        }
+        
+        document.addEventListener('DOMContentLoaded', async () => {
+            await getCsrfToken();
+            loadQuestions();
+            document.getElementById('submit-quiz').addEventListener('click', submitQuiz);
+        });
+        
+        async function loadQuestions() {
+            try {
+                console.log('Fetching questions...');
+                const response = await fetch('/api/quiz/questions');
+                console.log('Response status:', response.status);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const questions = await response.json();
+                console.log('Questions received:', questions);
+                if (questions.length === 0) {
+                    throw new Error('No questions received from the server');
+                }
+                displayQuestions(questions);
+            } catch (error) {
+                console.error('Error loading questions:', error);
+                document.getElementById('quiz-container').innerHTML = `<p>Error loading questions: ${error.message}</p>`;
+            }
+        }
+    
+        function displayQuestions(questions) {
+            currentQuestions = questions;
+            const quizContainer = document.getElementById('quiz-container');
+            quizContainer.innerHTML = questions.map((question, index) => `
+                <div class="question">
+                    <p>${index + 1}. ${question.statement}</p>
+                    <button class="true" data-index="${index}">True</button>
+                    <button class="false" data-index="${index}">False</button>
+                </div>
+            `).join('');
+            document.getElementById('submit-quiz').style.display = 'block';
+            
+            // Add event listeners to all buttons
+            document.querySelectorAll('.question button').forEach(button => {
+                button.addEventListener('click', function() {
+                    const index = parseInt(this.getAttribute('data-index'));
+                    const answer = this.classList.contains('true');
+                    answerQuestion(index, answer);
+                });
+            });
+        }
+    
+        function answerQuestion(index, answer) {
+            userAnswers[index] = answer;
+            console.log(`Question ${index + 1} answered: ${answer}`);
+                    
+            // Visual feedback
+            const buttons = document.querySelectorAll(`.question[data-index="${index}"] button`);
+            buttons.forEach(btn => btn.classList.remove('selected'));
+            event.target.classList.add('selected');
+        }
+
+        function displayQuestions(questions) {
+            currentQuestions = questions;
+            const quizContainer = document.getElementById('quiz-container');
+            quizContainer.innerHTML = questions.map((question, index) => `
+                <div class="question" data-index="${index}">
+                    <p>${index + 1}. ${question.statement}</p>
+                    <button class="true" data-index="${index}">True</button>
+                    <button class="false" data-index="${index}">False</button>
+                </div>
+            `).join('');
+            document.getElementById('submit-quiz').style.display = 'block';
+            
+            // Event listeners to all buttons
+            document.querySelectorAll('.question button').forEach(button => {
+                button.addEventListener('click', function(event) {
+                    const index = parseInt(this.getAttribute('data-index'));
+                    const answer = this.classList.contains('true');
+                    answerQuestion(index, answer, event);
+                });
+            });
+        }
+
+        async function submitQuiz() {
+            if (userAnswers.length !== currentQuestions.length) {
+                alert('Please answer all questions before submitting.');
+                return;
+            }
+    
+            try {
+                const response = await fetch('/api/quiz/submit', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'CSRF-Token': csrfToken  // Make sure you have this token
+                    },
+                    body: JSON.stringify({
+                        answers: currentQuestions.map((q, index) => ({
+                            questionId: q.id,
+                            userAnswer: userAnswers[index]
+                        }))
+                    }),
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const result = await response.json();
+                displayResult(result);
+            } catch (error) {
+                console.error('Error submitting quiz:', error);
+                alert('Failed to submit quiz. Please try again.');
+            }
+        }
+    
+        function displayResult(result) {
+            const resultDiv = document.getElementById('result');
+            if (result.correctAnswers !== undefined && result.totalQuestions !== undefined) {
+                resultDiv.textContent = `You got ${result.correctAnswers} out of ${result.totalQuestions} correct!`;
+            } else {
+                resultDiv.textContent = 'Failed to get quiz results. Please try again.';
+            }
+        }
+    
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM loaded, calling loadQuestions');
+            loadQuestions();
+            document.getElementById('submit-quiz').addEventListener('click', submitQuiz);
+        });
+    </script>
+</body>
+</html>
