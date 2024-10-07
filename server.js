@@ -1,6 +1,10 @@
+
+
 require('dotenv').config();
 
 const express = require('express');
+const path = require('path');
+const app = express();
 const { Sequelize, DataTypes } = require('sequelize');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
@@ -9,13 +13,9 @@ const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const csrf = require('csurf');
 const helmet = require('helmet');
-const sanitizeHtml = require('sanitize-html');
 const { body, validationResult } = require('express-validator');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
-const path = require('path');  // Keep only this declaration of 'path'
-
-const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Define JWT_SECRET from environment variable
@@ -30,8 +30,8 @@ if (!JWT_SECRET) {
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'public')));
 app.use(cookieParser());
 app.use(helmet({
   contentSecurityPolicy: {
@@ -43,11 +43,7 @@ app.use(helmet({
     },
   },
 }));
-app.use(cookieParser());
 app.use(csrf({ cookie: true }));
-
-// CSRF protection
-app.use(csrf({ cookie: true, ignoreMethods: ['GET', 'HEAD', 'OPTIONS'] }));
 
 // CSRF error handler
 app.use((err, req, res, next) => {
@@ -84,37 +80,6 @@ const sequelize = new Sequelize({
   storage: './database.sqlite'
 });
 
-// Serve static files from the 'public' directory
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Serve the main page
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'frontend.html'));
-});
-
-app.get('/api/csrf-token', (req, res) => {
-  res.json({ csrfToken: req.csrfToken() });
-});
-
-// Serve the admin page
-app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-});
-
-// Serve the question management page
-app.get('/question-admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'question-admin.html'));
-});
-
-// Serve the password reset page
-app.get('/reset/:token', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'password-reset.html'));
-});
-
-app.get('/register', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'register.html'));
-});
-
 // User model
 const User = sequelize.define('User', {
   firstName: DataTypes.STRING,
@@ -144,11 +109,14 @@ const User = sequelize.define('User', {
   totalCorrect: {
     type: DataTypes.INTEGER,
     defaultValue: 0
-  }
+  },
+  totalQuestions: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  resetPasswordToken: DataTypes.STRING,
+  resetPasswordExpires: DataTypes.DATE
 });
-
-// Sync database
-sequelize.sync({ force: true }).then(() => console.log('Database synced'));
 
 // Question Model
 const Question = sequelize.define('Question', {
@@ -162,31 +130,31 @@ const Question = sequelize.define('Question', {
   }
 });
 
+// Sync database
+sequelize.sync({ force: false }).then(() => console.log('Database synced'));
+
 // Middleware to verify JWT token
 const verifyToken = (req, res, next) => {
-  const token = req.cookies.token;
+  const token = req.cookies.accessToken;
   if (!token) {
-      console.log('No token found');
-      return res.status(401).json({ error: 'Access denied' });
+    return res.status(401).json({ error: 'Access denied' });
   }
 
   try {
-      const verified = jwt.verify(token, JWT_SECRET);
-      req.user = verified;
-      next();
+    const verified = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = verified;
+    next();
   } catch (error) {
-      console.error('Token verification error:', error);
-      res.status(400).json({ error: 'Invalid token', details: error.message });
+    res.status(401).json({ error: 'Invalid token' });
   }
 };
-
 // Middleware to verify admin token
 const verifyAdminToken = async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Access denied' });
 
   try {
-    const verified = jwt.verify(token, 'YOUR_ADMIN_SECRET_KEY');
+    const verified = jwt.verify(token, JWT_SECRET);
     if (!verified.isAdmin) {
       return res.status(403).json({ error: 'Not authorized' });
     }
@@ -198,93 +166,42 @@ const verifyAdminToken = async (req, res, next) => {
   }
 };
 
-app.use((req, res, next) => {
-  res.setHeader(
-    'Content-Security-Policy',
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'"
-  );
-  next();
+app.use((err, req, res, next) => {
+  if (err.code !== 'EBADCSRFTOKEN') return next(err);
+  res.status(403).json({ error: 'Invalid CSRF token' });
 });
 
-app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-});
-
-app.get('/quiz', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'quiz.html'));
-});
-
-// routes
-// login route 
-app.post('/api/login', async (req, res) => {
-  console.log('Login request received:', req.body);
-  const { redditHandle, password } = req.body;
-  
-  if (!redditHandle || !password) {
-      console.log('Missing reddit handle or password');
-      return res.status(400).json({ error: 'Reddit handle and password are required' });
-  }
-
-  try {
-      const user = await User.findOne({ where: { redditHandle } });
-      console.log('User found:', user ? 'Yes' : 'No');
-      
-      if (!user) {
-          console.log('User not found');
-          return res.status(400).json({ error: 'User not found' });
-      }
-
-      const validPassword = await bcrypt.compare(password, user.password);
-      console.log('Password valid:', validPassword);
-      
-      if (!validPassword) {
-          console.log('Invalid password');
-          return res.status(400).json({ error: 'Invalid password' });
-      }
-
-      const token = jwt.sign({ id: user.id, isAdmin: user.isAdmin }, JWT_SECRET, { expiresIn: '1h' });
-      res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
-      
-      const responseData = {
-          message: 'Logged in successfully',
-          isAdmin: user.isAdmin,
-          redirectUrl: user.isAdmin ? '/admin' : '/quiz'
-      };
-      console.log('Sending response:', responseData);
-      res.json(responseData);
-  } catch (error) {
-      console.error('Login error:', error);
-      res.status(500).json({ error: 'Server error', details: error.message });
-  }
-});
-
-// registration route 
+// Registration route
 app.post('/api/register', [
   body('redditHandle').notEmpty().withMessage('Reddit handle is required'),
   body('email').isEmail().withMessage('Valid email is required'),
   body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters long'),
 ], async (req, res) => {
+  console.log('Registration attempt:', req.body);
+
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
+    console.log('Validation errors:', errors.array());
+    return res.status(400).json({ error: errors.array()[0].msg });
   }
 
   const { firstName, lastName, redditHandle, email, password } = req.body;
   try {
-    // Check if user already exists
-    const existingUser = await User.findOne({ 
-      where: { 
+    console.log('Checking for existing user');
+    const existingUser = await User.findOne({
+      where: {
         [Sequelize.Op.or]: [
           { redditHandle },
           { email }
         ]
-      } 
+      }
     });
     if (existingUser) {
+      console.log('User already exists');
       return res.status(400).json({ error: 'User already exists with this Reddit handle or email' });
     }
 
-    // Create new user
+    console.log('Creating new user');
     const hashedPassword = await bcrypt.hash(password, 10);
     const newUser = await User.create({
       firstName,
@@ -294,188 +211,133 @@ app.post('/api/register', [
       password: hashedPassword
     });
 
-    // Create a JWT token
-    const token = jwt.sign({ id: newUser.id, isAdmin: newUser.isAdmin }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    console.log('User created:', newUser.id);
 
-    // Set the token as an HTTP-only cookie
+    const token = jwt.sign({ id: newUser.id, isAdmin: newUser.isAdmin }, JWT_SECRET, { expiresIn: '1h' });
+
     res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
 
-    res.status(201).json({ 
+    res.status(201).json({
       message: 'User registered successfully',
       redirectUrl: '/quiz'
     });
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ error: 'Server error', details: error.message });
+    res.status(500).json({ error: 'Server error', details: error.message || 'Unknown error occurred' });
   }
 });
 
+// Login route
 app.post('/api/login', async (req, res) => {
   const { redditHandle, password } = req.body;
   
-  console.log('Login attempt:', { redditHandle, password });
-
-  if (!redditHandle || !password) {
-      return res.status(400).json({ error: 'Reddit handle and password are required' });
-  }
-
   try {
-      const user = await User.findOne({ where: { redditHandle } });
-      if (!user) {
-          return res.status(400).json({ error: 'User not found' });
-      }
-
-      const validPassword = await bcrypt.compare(password, user.password);
-      if (!validPassword) {
-          return res.status(400).json({ error: 'Invalid password' });
-      }
-
-      // Create a JWT token
-      const token = jwt.sign({ id: user.id, isAdmin: user.isAdmin }, JWT_SECRET, { expiresIn: '1h' });
-
-      // Set the token as an HTTP-only cookie
-      res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
-
-      // Return user info and redirect URL
-      res.json({ 
-          message: 'Logged in successfully',
-          isAdmin: user.isAdmin,
-          redirectUrl: user.isAdmin ? '/admin' : '/quiz'
-      });
-  } catch (error) {
-      console.error('Login error:', error);
-      res.status(500).json({ error: 'Server error', details: error.message });
-  }
-});
-
-// Get all questions (admin only)
-app.get('/api/admin/questions', verifyAdminToken, async (req, res) => {
-  try {
-    const questions = await Question.findAll();
-    res.json(questions);
-  } catch (error) {
-    console.error('Get questions error:', error);
-    res.status(500).json({ error: 'Server error', details: error.message });
-  }
-});
-
-// Leaderboard route
-app.get('/api/leaderboard', async (req, res) => {
-  try {
-    const users = await User.findAll({
-      where: {
-        quizzesTaken: { [Sequelize.Op.gt]: 0 }
-      },
-      attributes: ['firstName', 'lastName', 'redditHandle', 'quizzesTaken', 'totalCorrect'],
-    });
-
-    const leaderboard = users
-      .map(user => ({
-        name: user.firstName || user.lastName || user.redditHandle,
-        quizzesTaken: user.quizzesTaken,
-        totalCorrect: user.totalCorrect,
-        percentCorrect: user.quizzesTaken > 0 
-          ? ((user.totalCorrect / (user.quizzesTaken * 10)) * 100).toFixed(2)
-          : 0
-      }))
-      .sort((a, b) => {
-        if (b.percentCorrect !== a.percentCorrect) {
-          return b.percentCorrect - a.percentCorrect;
-        }
-        return b.quizzesTaken - a.quizzesTaken;
-      })
-      .slice(0, 10);
-
-    res.json(leaderboard);
-  } catch (error) {
-    console.error('Leaderboard error:', error);
-    res.status(500).json({ error: 'Server error', details: error.message });
-  }
-});
-
-// registration route
-app.post('/api/register', [
-  body('redditHandle').notEmpty().withMessage('Reddit handle is required'),
-  body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters long'),
-], async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
-  const { firstName, lastName, redditHandle, password } = req.body;
-  try {
-    // Check if user already exists
-    const existingUser = await User.findOne({ where: { redditHandle } });
-    if (existingUser) {
-      return res.status(400).json({ error: 'User already exists with this Reddit handle' });
+    const user = await User.findOne({ where: { redditHandle } });
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(400).json({ error: 'Invalid credentials' });
     }
 
-    // Create new user
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = await User.create({
-      firstName,
-      lastName,
-      redditHandle,
-      password: hashedPassword
+    const accessToken = jwt.sign(
+      { id: user.id, isAdmin: user.isAdmin },
+      process.env.JWT_SECRET,
+      { expiresIn: '15m' }
+    );
+
+    const refreshToken = jwt.sign(
+      { id: user.id },
+      process.env.REFRESH_TOKEN_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    // Store refresh token in database
+    user.refreshToken = refreshToken;
+    await user.save();
+
+    // Set cookies
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000 // 15 minutes
     });
 
-    res.status(201).json({ message: 'User registered successfully' });
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/api/refresh-token', // Restrict refresh token to specific path
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
+    // Determine the redirect URL
+    const redirectUrl = user.isAdmin ? '/admin' : '/quiz';
+
+    res.json({ 
+      message: 'Logged in successfully',
+      isAdmin: user.isAdmin,
+      redirectUrl: redirectUrl
+    });
   } catch (error) {
-    console.error('Registration error:', error);
+    console.error('Login error:', error);
     res.status(500).json({ error: 'Server error', details: error.message });
   }
 });
 
-// Login route with input validation
-app.post('/api/login', async (req, res) => {
-  const { redditHandle, password } = req.body;
-  
-  console.log('Login attempt:', { redditHandle, password });
-
-  if (!redditHandle || !password) {
-      return res.status(400).json({ error: 'Reddit handle and password are required' });
+// Add a refresh token route
+app.post('/api/refresh-token', async (req, res) => {
+  const refreshToken = req.cookies.refreshToken;
+  if (!refreshToken) {
+    return res.status(401).json({ error: 'Refresh token required' });
   }
 
   try {
-      const user = await User.findOne({ where: { redditHandle } });
-      console.log('User found:', user ? 'Yes' : 'No');
-      
-      if (!user) {
-          return res.status(400).json({ error: 'User not found' });
-      }
+    const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
+    const user = await User.findOne({ where: { id: decoded.id, refreshToken } });
 
-      const validPassword = await bcrypt.compare(password, user.password);
-      console.log('Password valid:', validPassword);
-      
-      if (!validPassword) {
-          return res.status(400).json({ error: 'Invalid password' });
-      }
+    if (!user) {
+      return res.status(403).json({ error: 'Invalid refresh token' });
+    }
 
-      res.json({ message: 'Logged in successfully' });
+    const accessToken = jwt.sign(
+      { id: user.id, isAdmin: user.isAdmin },
+      process.env.JWT_SECRET,
+      { expiresIn: '15m' }
+    );
+
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000 // 15 minutes
+    });
+
+    res.json({ message: 'Token refreshed successfully' });
   } catch (error) {
-      console.error('Login error:', error);
-      res.status(500).json({ error: 'Server error', details: error.message });
+    console.error('Token refresh error:', error);
+    res.status(403).json({ error: 'Invalid refresh token' });
   }
 });
 
-app.get('/api/users', async (req, res) => {
-  try {
-      const users = await User.findAll({
-          attributes: ['id', 'firstName', 'lastName', 'redditHandle']
-      });
-      res.json(users);
-  } catch (error) {
-      console.error('Error fetching users:', error);
-      res.status(500).json({ error: 'Server error' });
-  }
+// Modify the logout route
+app.post('/api/logout', (req, res) => {
+  res.clearCookie('accessToken');
+  res.clearCookie('refreshToken', { path: '/api/refresh-token' });
+  res.json({ message: 'Logged out successfully' });
 });
 
+app.use(csrf({ cookie: true }));
+
+// Provide CSRF token to the client
 app.get('/api/csrf-token', (req, res) => {
   res.json({ csrfToken: req.csrfToken() });
 });
 
-// Admin login route with input validation
+// Serve the main page
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'frontend.html'));
+});
+
+// Admin login route
 app.post('/api/admin/login', async (req, res) => {
   const { username, password } = req.body;
 
@@ -490,12 +352,17 @@ app.post('/api/admin/login', async (req, res) => {
       return res.status(400).json({ error: 'Invalid password' });
     }
 
-    const token = jwt.sign({ id: user.id, isAdmin: true }, 'YOUR_ADMIN_SECRET_KEY', { expiresIn: '1h' });
+    const token = jwt.sign({ id: user.id, isAdmin: true }, JWT_SECRET, { expiresIn: '1h' });
     res.json({ token, message: 'Admin logged in successfully' });
   } catch (error) {
     console.error('Admin login error:', error);
     res.status(500).json({ error: 'Server error', details: error.message });
   }
+});
+
+// Serve the admin page
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 // Get all users (admin only)
@@ -600,40 +467,92 @@ app.delete('/api/admin/questions/:id', verifyAdminToken, async (req, res) => {
   }
 });
 
+app.get('/api/admin/questions/:id', verifyAdminToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const question = await Question.findByPk(id);
+    if (!question) {
+      return res.status(404).json({ error: 'Question not found' });
+    }
+    res.json(question);
+  } catch (error) {
+    console.error('Fetch question error:', error);
+    res.status(500).json({ error: 'Server error', details: error.message });
+  }
+});
+
 // Get questions for quiz (non-admin, requires regular user token)
 app.get('/api/quiz/questions', verifyToken, async (req, res) => {
   try {
-      const questions = await Question.findAll({
-          order: Sequelize.literal('RANDOM()'),
-          limit: 10,
-          attributes: ['id'] // Only send the question ID, not the statement
-      });
-      res.json(questions);
+    const quizLength = 5; // Fixed quiz length
+    
+    const questions = await Question.findAll({
+      order: Sequelize.literal('RANDOM()'),
+      limit: quizLength,
+      attributes: ['id', 'statement']
+    });
+    
+    const response = {
+      quizLength: quizLength,
+      questions: questions
+    };
+    
+    console.log('Sending response:', JSON.stringify(response, null, 2));
+    
+    res.json(response);
   } catch (error) {
-      console.error('Get quiz questions error:', error);
-      res.status(500).json({ error: 'Server error', details: error.message });
+    console.error('Get quiz questions error:', error);
+    res.status(500).json({ error: 'Server error', details: error.message });
+  }
+});
+
+app.get('/api/leaderboard', async (req, res) => {
+  try {
+    const users = await User.findAll({
+      where: {
+        quizzesTaken: { [Sequelize.Op.gt]: 0 }
+      },
+      attributes: ['firstName', 'lastName', 'redditHandle', 'quizzesTaken', 'totalCorrect'],
+      order: [['totalCorrect', 'DESC']],
+      limit: 10
+    });
+
+    const leaderboard = users.map(user => ({
+      name: user.firstName || user.lastName || user.redditHandle,
+      score: user.totalCorrect
+    }));
+
+    res.json(leaderboard);
+  } catch (error) {
+    console.error('Leaderboard error:', error);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
 // Submit quiz answers (non-admin, requires regular user token)
 app.post('/api/quiz/submit', verifyToken, async (req, res) => {
-  const { answers } = req.body; // answers should be an array of { questionId, userAnswer }
+  const { answers } = req.body;
+  
   try {
       let correctAnswers = 0;
+      const totalQuestions = answers.length;
+
       for (let answer of answers) {
           const question = await Question.findByPk(answer.questionId);
           if (question && question.answer === answer.userAnswer) {
               correctAnswers++;
           }
       }
-      
+
+      // Update user statistics
       const user = await User.findByPk(req.user.id);
       await user.increment('quizzesTaken');
       await user.increment('totalCorrect', { by: correctAnswers });
+      await user.increment('totalQuestions', { by: totalQuestions });
 
       res.json({ 
           correctAnswers, 
-          totalQuestions: answers.length,
+          totalQuestions,
           message: 'Quiz submitted successfully'
       });
   } catch (error) {
@@ -642,151 +561,141 @@ app.post('/api/quiz/submit', verifyToken, async (req, res) => {
   }
 });
 
-app.get('/request-reset', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'request-reset.html'));
+// Password reset request route
+app.post('/api/request-reset', [
+  body('email').isEmail().withMessage('Valid email is required'),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+      return res.status(400).json({ error: errors.array()[0].msg });
+  }
+
+  const { email } = req.body;
+
+  try {
+      const user = await User.findOne({ where: { email } });
+      if (!user) {
+          return res.status(404).json({ error: 'No user found with that email address' });
+      }
+
+      const resetToken = crypto.randomBytes(20).toString('hex');
+      user.resetPasswordToken = resetToken;
+      user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
+      await user.save();
+
+      // Create a test account using Ethereal
+      let testAccount = await nodemailer.createTestAccount();
+
+      // Create a transporter using the test account
+      let transporter = nodemailer.createTransport({
+          host: "smtp.ethereal.email",
+          port: 587,
+          secure: false, // Use TLS
+          auth: {
+              user: testAccount.user,
+              pass: testAccount.pass,
+          },
+      });
+
+      // Send email
+      let info = await transporter.sendMail({
+          from: '"Muscle Testing Quiz" <noreply@example.com>',
+          to: user.email,
+          subject: "Password Reset Request",
+          text: `You are receiving this because you (or someone else) have requested the reset of the password for your account.\n\n
+                 Please click on the following link, or paste this into your browser to complete the process:\n\n
+                 http://${req.headers.host}/reset/${resetToken}\n\n
+                 If you did not request this, please ignore this email and your password will remain unchanged.\n`,
+      });
+
+      console.log("Message sent: %s", info.messageId);
+      console.log("Preview URL: %s", nodemailer.getTestMessageUrl(info));
+      res.json({ message: 'An email has been sent to ' + user.email + ' with further instructions.' });
+  } catch (error) {
+      console.error('Password reset request error:', error);
+      res.status(500).json({ error: 'An error occurred while processing your request' });
+  }
 });
 
-app.get('/reset-password', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'reset-password.html'));
-});
-
-// api/request-reset route 
+// Password reset route
 app.post('/api/reset-password', [
-  body('token').notEmpty().withMessage('Reset token is required'),
+  body('token').notEmpty().withMessage('Token is required'),
   body('newPassword').isLength({ min: 8 }).withMessage('Password must be at least 8 characters long'),
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({ error: errors.array()[0].msg });
+      return res.status(400).json({ error: errors.array()[0].msg });
   }
 
   const { token, newPassword } = req.body;
+
   try {
-    const user = await User.findOne({
-      where: {
-        resetPasswordToken: token,
-        resetPasswordExpires: { [Sequelize.Op.gt]: Date.now() }
+      const user = await User.findOne({
+          where: {
+              resetPasswordToken: token,
+              resetPasswordExpires: { [Sequelize.Op.gt]: Date.now() }
+          }
+      });
+
+      if (!user) {
+          return res.status(400).json({ error: 'Password reset token is invalid or has expired' });
       }
-    });
 
-    if (!user) {
-      return res.status(400).json({ error: 'Invalid or expired reset token' });
-    }
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      user.password = hashedPassword;
+      user.resetPasswordToken = null;
+      user.resetPasswordExpires = null;
+      await user.save();
 
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await user.update({
-      password: hashedPassword,
-      resetPasswordToken: null,
-      resetPasswordExpires: null
-    });
-
-    res.json({ message: 'Password reset successful' });
+      res.json({ message: 'Your password has been updated' });
   } catch (error) {
-    console.error('Password reset error:', error);
-    res.status(500).json({ error: 'An error occurred while resetting your password. Please try again later.' });
+      console.error('Password reset error:', error);
+      res.status(500).json({ error: 'An error occurred while resetting your password' });
   }
 });
 
-app.get('/api/csrf-token', (req, res) => {
-  res.json({ csrfToken: req.csrfToken() });
+// Serve the quiz page
+app.get('/quiz', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'quiz.html'));
 });
-
-app.use((err, req, res, next) => {
-  if (err.code !== 'EBADCSRFTOKEN') return next(err);
-  res.status(403).json({ error: 'Invalid CSRF token' });
-});
-
-async function sendResetEmail(email, resetToken, req) {
-  // Create a test account at ethereal.email for development
-  let testAccount = await nodemailer.createTestAccount();
-
-  let transporter = nodemailer.createTransport({
-    host: "smtp.ethereal.email",
-    port: 587,
-    secure: false,
-    auth: {
-      user: testAccount.user,
-      pass: testAccount.pass,
-    },
-  });
-
-  // Construct the reset link
-  let resetLink = `http://${req.headers.host}/reset-password?token=${resetToken}`;
-
-  let info = await transporter.sendMail({
-    from: '"Muscle Testing Quiz" <noreply@muscletestingquiz.com>',
-    to: email,
-    subject: "Password Reset Request",
-    text: `You are receiving this because you (or someone else) have requested the reset of the password for your account.\n\n
-           Please click on the following link, or paste this into your browser to complete the process:\n\n
-           ${resetLink}\n\n
-           If you did not request this, please ignore this email and your password will remain unchanged.\n`,
-    html: `<p>You are receiving this because you (or someone else) have requested the reset of the password for your account.</p>
-           <p>Please click on the following link, or paste this into your browser to complete the process:</p>
-           <p><a href="${resetLink}">${resetLink}</a></p>
-           <p>If you did not request this, please ignore this email and your password will remain unchanged.</p>`
-  });
-
-  console.log("Message sent: %s", info.messageId);
-  console.log("Preview URL: %s", nodemailer.getTestMessageUrl(info));
-
-  return info;
-}
 
 // Sync database and start server
-sequelize.sync({ force: true }) // This will drop and recreate all tables
+sequelize.sync({ force: false }) // Ensure tables are not dropped
   .then(async () => {
     console.log('Database synced');
 
     try {
-      // Create admin user
-      const [adminUser, adminCreated] = await User.findOrCreate({
-        where: { redditHandle: 'admin' },
-        defaults: {
-          firstName: 'Admin',
-          lastName: 'User',
-          redditHandle: 'admin',
-          email: 'admin@example.com',
-          password: bcrypt.hashSync('adminpassword', 10),
-          isAdmin: true
-        }
-      });
+      // Check if questions exist
+      const questionCount = await Question.count();
+      
+      if (questionCount === 0) {
+        // Add initial questions only if the table is empty
+        const questions = [
+          { statement: "The Earth is flat.", answer: false },
+          { statement: "Water boils at 100 degrees Celsius at sea level.", answer: true },
+          { statement: "The capital of France is London.", answer: false },
+          { statement: "Humans have walked on the Moon.", answer: true },
+          { statement: "Dolphins are a type of fish.", answer: false },
+        ];
 
-      console.log(adminCreated ? 'Admin user created' : 'Admin user already exists');
+        await Question.bulkCreate(questions);
+        console.log('Initial questions added');
+      } else {
+        console.log('Questions already exist, skipping initialization');
+      }
 
-      // Create a non-admin user
-      const [regularUser, userCreated] = await User.findOrCreate({
-        where: { redditHandle: 'user' },
-        defaults: {
-          firstName: 'Regular',
-          lastName: 'User',
-          redditHandle: 'user',
-          email: 'user@example.com',
-          password: bcrypt.hashSync('userpassword', 10),
-          isAdmin: false
-        }
-      });
 
-      console.log(userCreated ? 'Regular user created' : 'Regular user already exists');
-
-      // Add initial questions
-      const questions = [
-        { statement: "The Earth is flat.", answer: false },
-        { statement: "Water boils at 100 degrees Celsius at sea level.", answer: true },
-        { statement: "The capital of France is London.", answer: false },
-        { statement: "Humans have walked on the Moon.", answer: true },
-        { statement: "Dolphins are a type of fish.", answer: false },
-      ];
-
-      await Question.bulkCreate(questions);
-      console.log('Initial questions added');
-
-      // Start the server
-      app.listen(PORT, () => {
-        console.log(`Server is running on port ${PORT}`);
-      });
-    } catch (error) {
-      console.error('Error during server startup:', error);
-    }
-  })
-  .catch(error => console.error('Unable to sync database:', error));
+        // Start the server
+        app.listen(PORT, () => {
+          console.log(`Server is running on port ${PORT}`);
+        });
+      } catch (error) {
+        console.error('Error during server startup:', error);
+      }
+        // Error handling middleware
+        app.use((err, req, res, next) => {
+          console.error(err.stack);
+          res.status(500).json({ error: 'Something went wrong!', details: err.message });
+        });
+      })
+      .catch(error => console.error('Unable to sync database:', error));

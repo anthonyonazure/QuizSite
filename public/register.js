@@ -1,42 +1,55 @@
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     const form = document.getElementById('register-form');
-    form.addEventListener('submit', handleRegister);
-});
-
-async function handleRegister(event) {
-    event.preventDefault();
-    
-    const firstName = document.getElementById('firstName').value;
-    const lastName = document.getElementById('lastName').value;
-    const redditHandle = document.getElementById('redditHandle').value;
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-    const confirmPassword = document.getElementById('confirmPassword').value;
-
-    if (password !== confirmPassword) {
-        alert("Passwords don't match!");
+    const messageArea = document.getElementById('message-area');
+   
+// Fetch CSRF token
+    let csrfToken;
+    try {
+        const response = await fetch('/api/csrf-token');
+        const data = await response.json();
+        csrfToken = data.csrfToken;
+    } catch (error) {
+        console.error('Error fetching CSRF token:', error);
+        messageArea.textContent = 'Error initializing form. Please try again later.';
         return;
     }
 
-    try {
-        const response = await fetch('/api/register', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ firstName, lastName, redditHandle, email, password }),
-        });
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
 
-        const data = await response.json();
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
 
-        if (response.ok) {
-            alert('Registration successful! Please log in.');
-            window.location.href = '/login';
-        } else {
-            alert(`Registration failed: ${data.error}`);
+        // Basic client-side validation
+        if (data.password !== data.confirmPassword) {
+            messageArea.textContent = 'Passwords do not match';
+            return;
         }
-    } catch (error) {
-        console.error('Error:', error);
-        alert('An error occurred during registration. Please try again.');
-    }
-}
+
+        try {
+            const response = await fetch('/api/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'CSRF-Token': csrfToken
+                },
+                body: JSON.stringify(data),
+            });
+
+            const responseData = await response.json();
+
+            if (response.ok) {
+                messageArea.textContent = 'Registration successful! Redirecting to login...';
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 2000);
+            } else {
+                console.error('Registration failed:', responseData);
+                messageArea.textContent = `Registration failed: ${responseData.error || responseData.details || 'Unknown error'}`;
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            messageArea.textContent = 'An error occurred. Please try again later.';
+        }
+    });
+});

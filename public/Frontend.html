@@ -37,6 +37,7 @@
         }
         .button {
             padding: 10px 20px;
+            margin: 5px;
             border: none;
             border-radius: 5px;
             cursor: pointer;
@@ -48,8 +49,11 @@
             color: white;
         }
         .button-secondary {
-            background-color: #6c757d;
-            color: white;
+            background-color: #f0f0f0;
+            color: #333;
+        }
+        .button-secondary:hover {
+            background-color: #e0e0e0;
         }
         .button-danger {
             background-color: #dc3545;
@@ -77,26 +81,33 @@
             display: none;
             z-index: 1000;
         }
+        .button-group {
+            position: relative;
+            z-index: 10;
+        }
+        #register-button {
+            position: relative;
+            z-index: 11;
+        }
     </style>
+    <meta name="csrf-token" content="{{ csrfToken }}">
 </head>
 
 <body>
     <div id="error-display" style="background-color: #ffcccc; color: #cc0000; padding: 10px; margin: 10px 0; display: none;"></div>
     <div class="container">
         <h1>Muscle Testing Quiz</h1>
-        <a href="/register" class="button">Register</a>
         <div id="login-register">
             <h2>Login, Register, or Reset Password</h2>
             <form id="auth-form">
                 <input type="text" id="reddit-handle" name="reddit-handle" placeholder="Reddit Handle" required>
-                <input type="email" id="email" name="email" placeholder="Email" required>
                 <input type="password" id="password" name="password" placeholder="Password" required>
-                <div class="button-group">
-                    <button type="submit" id="login-button" class="button button-primary">Login</button>
-                    <button type="submit" id="register-button" class="button button-secondary">Register</button>
-                    <button type="submit" id="reset-password-button" class="button button-secondary">Reset Password</button>
-                </div>
+                <button type="submit" id="login-button" class="button button-primary">Login</button>
             </form>
+            <div class="button-group">
+                <button type="button" id="register-button" class="button button-secondary">Register</button>
+                <button type="button" id="reset-password-button" class="button button-secondary">Reset Password</button>
+            </div>
         </div>
 
         <div id="message" style="display: none;"></div>
@@ -107,110 +118,179 @@
             <div id="question-container">
                 <button id="start-quiz-button">Start Quiz</button>
                 <h3>Question <span id="question-number"></span></h3>
+                <p id="question-text"></p>
                 <button id="true-button">True</button>
                 <button id="false-button">False</button>
             </div>
             <button id="stop-quiz">Stop Quiz</button>
         </div>
 
-        <div id="leaderboard">
+        <div id="leaderboard" style="display: none;">
             <h2>Leaderboard</h2>
             <table>
-                <tr>
-                    <th>Rank</th>
-                    <th>Name</th>
-                    <th>Score</th>
-                </tr>
-                <!-- Leaderboard entries will be inserted here dynamically -->
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Name</th>
+                        <th>Score</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Leaderboard entries will be inserted here dynamically -->
+                </tbody>
             </table>
         </div>
     </div>
 
     <div id="notification" style="display: none;"></div>
 
+    <script src="/js/auth.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const authForm = document.getElementById('auth-form');
-            const loginButton = document.getElementById('login-button');
-            const registerButton = document.getElementById('register-button');
-            const resetPasswordButton = document.getElementById('reset-password-button');
             const errorDisplay = document.getElementById('error-display');
             const notification = document.getElementById('notification');
             const quizSection = document.getElementById('quiz-section');
             const leaderboard = document.getElementById('leaderboard');
-
-            let csrfToken;
+            
             let currentQuestions = [];
             let currentQuestionIndex = 0;
-
-            // Fetch CSRF token when the page loads
-            fetch('/api/csrf-token')
-                .then(response => response.json())
-                .then(data => {
-                    csrfToken = data.csrfToken;
-                })
-                .catch(error => showError('Failed to fetch CSRF token: ' + error.message));
-
-            authForm.addEventListener('submit', function(event) {
+        
+            authForm.addEventListener('submit', async function(event) {
                 event.preventDefault();
-                const clickedButton = document.activeElement;
-                if (clickedButton === loginButton) {
-                    handleAuth('login');
-                } else if (clickedButton === registerButton) {
-                    handleAuth('register');
-                } else if (clickedButton === resetPasswordButton) {
-                    handlePasswordReset();
-                }
-            });
-
-            async function handleAuth(type) {
                 const redditHandle = document.getElementById('reddit-handle').value;
-                const email = document.getElementById('email').value;
                 const password = document.getElementById('password').value;
-
-                const endpoint = type === 'register' ? '/api/register' : '/api/login';
-                const body = type === 'register' ? { redditHandle, email, password } : { redditHandle, password };
-
-                console.log('Sending request to:', endpoint, 'with body:', body);
-
+                
                 try {
-                    const response = await fetch(endpoint, {
+                    const csrfToken = await fetchCSRFToken();
+                    const response = await fetch('/api/login', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                             'CSRF-Token': csrfToken
                         },
-                        body: JSON.stringify(body),
+                        body: JSON.stringify({ redditHandle, password }),
                     });
-
+            
                     const data = await response.json();
-                    console.log('Response received:', data);
-
+            
                     if (response.ok) {
                         showNotification(data.message, 'success');
-                        if (data.redirectUrl) {
-                            console.log('Redirecting to:', data.redirectUrl);
-                            setTimeout(() => {
-                                window.location.href = data.redirectUrl;
-                            }, 2000);
-                        } else {
-                            // Show quiz section after successful login
-                            showQuizSection();
-                        }
+                        
+                        // Redirect based on the URL provided by the server
+                        setTimeout(() => {
+                            window.location.href = data.redirectUrl;
+                        }, 1000); // Redirect after 1 second to allow user to see the success message
                     } else {
-                        if (data.error === 'Token has expired. Please log in again.') {
-                            showNotification('Your session has expired. Please log in again.', 'error');
-                            // Optionally, redirect to the login page
-                            setTimeout(() => {
-                                window.location.href = '/login';
-                            }, 2000);
-                        } else {
-                            showNotification(data.error, 'error');
-                        }
+                        showNotification(data.error || 'Login failed', 'error');
                     }
                 } catch (error) {
-                    console.error('Auth error:', error);
+                    console.error('Login error:', error);
                     showNotification('An error occurred. Please try again.', 'error');
+                }
+            });
+        
+            document.getElementById('register-button').addEventListener('click', function() {
+                // Implement registration logic or redirect to registration page
+                console.log('Register button clicked');
+            });
+
+            document.getElementById('reset-password-button').addEventListener('click', function() {
+                // Implement password reset logic or redirect to password reset page
+                console.log('Reset password button clicked');
+            });
+
+            async function fetchCSRFToken() {
+                const response = await fetch('/api/csrf-token');
+                const data = await response.json();
+                return data.csrfToken;
+            }
+
+            async function startQuiz() {
+                try {
+                    const response = await fetchWithTokenRefresh('/api/quiz/questions');
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch questions');
+                    }
+                    currentQuestions = await response.json();
+                    currentQuestionIndex = 0;
+                    document.getElementById('quiz-section').style.display = 'block';
+                    showNextQuestion();
+                } catch (error) {
+                    console.error('Error starting quiz:', error);
+                    showNotification('Failed to start quiz. Please try again.', 'error');
+                }
+            }
+            
+            function showNextQuestion() {
+                if (currentQuestionIndex < currentQuestions.length) {
+                    const questionNumber = document.getElementById('question-number');
+                    const questionText = document.getElementById('question-text');
+                    questionNumber.textContent = currentQuestionIndex + 1;
+                    questionText.textContent = currentQuestions[currentQuestionIndex].statement;
+                } else {
+                    finishQuiz();
+                }
+            }
+            
+            function answerQuestion(answer) {
+                currentQuestions[currentQuestionIndex].userAnswer = answer;
+                currentQuestionIndex++;
+                showNextQuestion();
+            }
+
+            async function finishQuiz() {
+                try {
+                    const csrfToken = await fetchCSRFToken();
+                    const response = await fetch('/api/quiz/submit', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'CSRF-Token': csrfToken
+                        },
+                        body: JSON.stringify({
+                            answers: currentQuestions.map(q => ({
+                                questionId: q.id,
+                                userAnswer: q.userAnswer
+                            }))
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to submit quiz');
+                    }
+
+                    const result = await response.json();
+                    showNotification(`Quiz finished! You got ${result.correctAnswers} out of ${result.totalQuestions} correct.`, 'success');
+                    document.getElementById('quiz-section').style.display = 'none';
+                    fetchLeaderboard();
+                } catch (error) {
+                    console.error('Error finishing quiz:', error);
+                    showNotification('Failed to submit quiz. Please try again.', 'error');
+                }
+            }
+
+            async function fetchLeaderboard() {
+                try {
+                    const response = await fetch('/api/leaderboard');
+                    const leaderboardData = await response.json();
+                    const leaderboardBody = document.querySelector('#leaderboard tbody');
+            
+                    leaderboardBody.innerHTML = '';
+                    leaderboardData.forEach((entry, index) => {
+                        const row = `
+                            <tr>
+                                <td>${index + 1}</td>
+                                <td>${entry.name}</td>
+                                <td>${entry.score}</td>
+                            </tr>
+                        `;
+                        leaderboardBody.innerHTML += row;
+                    });
+                    leaderboard.style.display = 'block';
+                } catch (error) {
+                    console.error('Error fetching leaderboard:', error);
+                    showNotification('Failed to fetch leaderboard', 'error');
                 }
             }
 
@@ -232,8 +312,9 @@
 
             async function handlePasswordReset() {
                 const email = document.getElementById('email').value;
-
+            
                 try {
+                    const csrfToken = await fetchCSRFToken();
                     const response = await fetch('/api/request-reset', {
                         method: 'POST',
                         headers: {
@@ -256,119 +337,12 @@
                     showNotification('An error occurred. Please try again.', 'error');
                 }
             }
-
-            async function startQuiz() {
-                try {
-                    const response = await fetch('/api/quiz/questions', {
-                        headers: {
-                            'Authorization': `Bearer ${userToken}`,
-                            'CSRF-Token': csrfToken
-                        }
-                    });
-                    if (!response.ok) {
-                        throw new Error('Failed to fetch questions');
-                    }
-                    currentQuestions = await response.json();
-                    currentQuestionIndex = 0;
-                    document.getElementById('quiz-section').style.display = 'block';
-                    showNextQuestion();
-                } catch (error) {
-                    console.error('Error starting quiz:', error);
-                    alert('Failed to start quiz. Please try again.');
-                }
-            }
             
-            function showNextQuestion() {
-                if (currentQuestionIndex < currentQuestions.length) {
-                    document.getElementById('question-number').textContent = currentQuestionIndex + 1;
-                    // The actual question text is not displayed
-                } else {
-                    finishQuiz();
-                }
-            }
-            
-            function answerQuestion(answer) {
-                currentQuestions[currentQuestionIndex].userAnswer = answer;
-                currentQuestionIndex++;
-                showNextQuestion();
-            }
-            
-            function finishQuiz() {
-                const answers = currentQuestions.map(q => ({
-                    questionId: q.id,
-                    userAnswer: q.userAnswer
-                }));
-            
-                fetch('/api/quiz/submit', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${userToken}`,
-                        'CSRF-Token': csrfToken
-                    },
-                    body: JSON.stringify({ answers })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    alert(`Quiz completed! You got ${data.correctAnswers} out of ${data.totalQuestions} correct.`);
-                    document.getElementById('quiz-section').style.display = 'none';
-                    loadLeaderboard(); // Assuming you have this function to update the leaderboard
-                })
-                .catch(error => {
-                    console.error('Error submitting quiz:', error);
-                    alert('Failed to submit quiz. Please try again.');
-                });
-            }
-            
-
-            // function to handle token exipration 
-            function handleTokenExpiration(error) {
-                if (error.message.includes('token expired')) {
-                  alert('Your session has expired. Please log in again.');
-                  window.location.href = '/admin-login'; // Redirect to admin login page
-                }
-              }
-
-            function showQuizSection() {
-                authForm.style.display = 'none';
-                leaderboard.style.display = 'none';
-                quizSection.style.display = 'block';
-            }
-
-            // Function to fetch and display the leaderboard
-            async function fetchLeaderboard() {
-                try {
-                    const response = await fetch('/api/leaderboard');
-                    const data = await response.json();
-                    console.log('Leaderboard data:', data);
-
-                    const leaderboardTable = document.querySelector('#leaderboard table');
-                    leaderboardTable.innerHTML = '<tr><th>Rank</th><th>Name</th><th>Score</th></tr>';
-
-                    data.forEach((entry, index) => {
-                        const row = document.createElement('tr');
-                        row.innerHTML = `
-                            <td>${index + 1}</td>
-                            <td>${entry.name}</td>
-                            <td>${entry.score}%</td>
-                        `;
-                        leaderboardTable.appendChild(row);
-                    });
-
-                    leaderboard.style.display = 'block';
-                } catch (error) {
-                    console.error('Leaderboard fetch error:', error);
-                    showNotification('Failed to fetch leaderboard. Please try again.', 'error');
-                }
-            }
-
-            // Fetch leaderboard on page load
-            fetchLeaderboard();
+            document.getElementById('true-button').addEventListener('click', () => answerQuestion(true));
+            document.getElementById('false-button').addEventListener('click', () => answerQuestion(false));
+            document.getElementById('stop-quiz').addEventListener('click', finishQuiz);
+            document.getElementById('start-quiz-button').addEventListener('click', startQuiz);
         });
-        document.getElementById('true-button').addEventListener('click', () => answerQuestion(true));
-        document.getElementById('false-button').addEventListener('click', () => answerQuestion(false));
-        document.getElementById('stop-quiz').addEventListener('click', finishQuiz);
-        document.getElementById('start-quiz-button').addEventListener('click', startQuiz);
     </script>
 </body>
 </html>
