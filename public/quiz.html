@@ -4,76 +4,46 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Muscle Testing Quiz</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            margin: 0;
-            padding: 20px;
-            background-color: #f4f4f4;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 20px;
-            border-radius: 5px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #333;
-            text-align: center;
-        }
-        #quiz-container {
-            margin-top: 20px;
-        }
-        .question {
-            margin-bottom: 20px;
-        }
-        button {
-            padding: 10px 20px;
-            margin: 5px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: background-color 0.3s;
-        }
-        .true {
-            background-color: #28a745;
-            color: white;
-        }
-        .false {
-            background-color: #dc3545;
-            color: white;
-        }
-        .selected {
-            opacity: 0.7;
-            box-shadow: 0 0 5px #333;
-        }
-        #result {
-            margin-top: 20px;
-            font-weight: bold;
-        }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
-        <div class="container">
-            <h1>Welcome to the Muscle Testing Quiz</h1>
-        
-            <div id="quiz-container">
-                <ol id="question-list">
-                    <!-- Questions will be dynamically inserted here -->
-                </ol>
-            </div>
-        
-            <div id="result" style="display: none;"></div>
-        
-            <button id="submit-quiz">Submit Quiz</button>
-            <button id="reset-quiz" style="display: none;">Take Another Quiz</button>
+        <h1>Welcome to the Muscle Testing Quiz</h1>
+        <nav>
+            <a href="profile.html" class="button">View Profile</a>
+            <a href="#" id="contact-link" class="button">Contact Us</a>
+        </nav>
+    
+        <div id="quiz-container">
+            <div id="loading-message" style="display: none;">Loading quiz questions...</div>
+            <ol id="question-list">
+                <!-- Questions will be dynamically inserted here -->
+            </ol>
         </div>
-        
-        <script src="quiz.js"></script>
+    
+        <div id="result" style="display: none;"></div>
+    
+        <button id="submit-quiz" class="button">Submit Quiz</button>
+        <button id="reset-quiz" class="button" style="display: none;">Take Another Quiz</button>
+        <a href="index.html" id="quit-quiz" class="button button-secondary">Quit Quiz</a>
+    </div>
+
+    <div id="contact-form" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Contact Us</h2>
+            <form id="contact-us-form">
+                <label for="email">Your Email:</label>
+                <input type="email" id="email" name="email" required>
+                <label for="subject">Subject:</label>
+                <input type="text" id="subject" name="subject" required>
+                <label for="message">Message:</label>
+                <textarea id="message" name="message" required></textarea>
+                <button type="submit" class="button">Send Message</button>
+            </form>
+        </div>
+    </div>
+    
+    <script src="quiz.js"></script>
 </body>
 </html>

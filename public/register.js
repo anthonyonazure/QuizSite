@@ -1,55 +1,33 @@
-document.addEventListener('DOMContentLoaded', async () => {
-    const form = document.getElementById('register-form');
-    const messageArea = document.getElementById('message-area');
-   
-// Fetch CSRF token
-    let csrfToken;
-    try {
-        const response = await fetch('/api/csrf-token');
-        const data = await response.json();
-        csrfToken = data.csrfToken;
-    } catch (error) {
-        console.error('Error fetching CSRF token:', error);
-        messageArea.textContent = 'Error initializing form. Please try again later.';
-        return;
-    }
+document.addEventListener('DOMContentLoaded', function() {
+    const registerForm = document.getElementById('register-form');
 
-    form.addEventListener('submit', async (e) => {
+    registerForm.addEventListener('submit', async function(e) {
         e.preventDefault();
 
-        const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
-
-        // Basic client-side validation
-        if (data.password !== data.confirmPassword) {
-            messageArea.textContent = 'Passwords do not match';
-            return;
-        }
+        const redditHandle = document.getElementById('redditHandle').value;
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
 
         try {
             const response = await fetch('/api/register', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'CSRF-Token': csrfToken
                 },
-                body: JSON.stringify(data),
+                body: JSON.stringify({ redditHandle, email, password }),
             });
 
-            const responseData = await response.json();
+            const data = await response.json();
 
             if (response.ok) {
-                messageArea.textContent = 'Registration successful! Redirecting to login...';
-                setTimeout(() => {
-                    window.location.href = '/';
-                }, 2000);
+                alert('Registration successful! Please log in.');
+                window.location.href = 'login.html';
             } else {
-                console.error('Registration failed:', responseData);
-                messageArea.textContent = `Registration failed: ${responseData.error || responseData.details || 'Unknown error'}`;
+                alert(`Registration failed: ${data.message}`);
             }
         } catch (error) {
-            console.error('Error:', error);
-            messageArea.textContent = 'An error occurred. Please try again later.';
+            console.error('Error during registration:', error);
+            alert('An error occurred during registration. Please try again.');
         }
     });
 });
