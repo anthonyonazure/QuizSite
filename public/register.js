@@ -1,3 +1,9 @@
+async function fetchCSRFToken() {
+    const response = await fetch('/api/csrf-token');
+    const data = await response.json();
+    return data.csrfToken;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const registerForm = document.getElementById('register-form');
 
@@ -7,14 +13,19 @@ document.addEventListener('DOMContentLoaded', function() {
         const redditHandle = document.getElementById('redditHandle').value;
         const email = document.getElementById('email').value;
         const password = document.getElementById('password').value;
+        const firstName = document.getElementById('firstName').value;
+        const lastName = document.getElementById('lastName').value;
 
         try {
+            const csrfToken = await fetchCSRFToken();
             const response = await fetch('/api/register', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
                 },
-                body: JSON.stringify({ redditHandle, email, password }),
+                body: JSON.stringify({ redditHandle, email, password, firstName, lastName }),
+                credentials: 'include'
             });
 
             const data = await response.json();

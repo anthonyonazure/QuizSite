@@ -12,6 +12,10 @@
             margin-bottom: 10px;
             box-sizing: border-box;
         }
+        .required::after {
+            content: " *";
+            color: red;
+        }
     </style>
 </head>
 <body>
@@ -20,23 +24,23 @@
         <form id="register-form">
             <div>
                 <label for="firstName">First Name:</label>
-                <input type="text" id="firstName" name="firstName" class="input-field">
+                <input type="text" id="firstName" name="firstName" class="input-field" placeholder="Enter your first name">
             </div>
             <div>
                 <label for="lastName">Last Name:</label>
-                <input type="text" id="lastName" name="lastName" class="input-field">
+                <input type="text" id="lastName" name="lastName" class="input-field" placeholder="Enter your last name">
             </div>
             <div>
-                <label for="redditHandle">Reddit Handle:</label>
-                <input type="text" id="redditHandle" name="redditHandle" required class="input-field">
+                <label for="redditHandle" class="required">Reddit Handle:</label>
+                <input type="text" id="redditHandle" name="redditHandle" required class="input-field" placeholder="Enter your Reddit username">
             </div>
             <div>
-                <label for="email">Email:</label>
-                <input type="email" id="email" name="email" required class="input-field">
+                <label for="email" class="required">Email:</label>
+                <input type="email" id="email" name="email" required class="input-field" placeholder="Enter your email address">
             </div>
             <div>
-                <label for="password">Password:</label>
-                <input type="password" id="password" name="password" required class="input-field">
+                <label for="password" class="required">Password:</label>
+                <input type="password" id="password" name="password" required class="input-field" placeholder="Choose a strong password">
             </div>
             <button type="submit">Register</button>
         </form>

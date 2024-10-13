@@ -114,6 +114,53 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+// Registration route
+app.post('/api/register', async (req, res) => {
+  const { redditHandle, email, password, firstName, lastName } = req.body;
+  console.log(`Registration attempt for user: ${redditHandle}`);
+
+  try {
+    // Check if user already exists
+    const existingUser = await new Promise((resolve, reject) => {
+      db.get('SELECT * FROM users WHERE redditHandle = ? OR email = ?', [redditHandle, email], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ message: 'User already exists' });
+    }
+
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Insert new user into the database
+    const result = await new Promise((resolve, reject) => {
+      const createdAt = new Date().toISOString();
+      const updatedAt = createdAt;
+      db.run(`INSERT INTO users (
+        redditHandle, email, password, firstName, lastName, createdAt, updatedAt, 
+        totalQuestions, totalCorrect, rank, isAdmin
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
+        [redditHandle, email, hashedPassword, firstName, lastName, createdAt, updatedAt, 
+         0, 0, 0, false], 
+        function(err) {
+          if (err) reject(err);
+          else resolve(this);
+        }
+      );
+    });
+
+    console.log('Registration successful');
+    res.status(201).json({ message: 'User registered successfully' });
+  } catch (error) {
+    console.error('Registration error:', error);
+    console.error('Error details:', error.message);
+    res.status(500).json({ message: 'Error during registration', error: error.message });
+  }
+});
+
 // Logout route
 app.post('/api/logout', (req, res) => {
   req.session.destroy((err) => {
