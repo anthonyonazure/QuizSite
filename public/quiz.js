@@ -202,6 +202,29 @@ function showResult() {
     }
 }
 
+async function handleLogout() {
+    try {
+        const csrfToken = await fetchCSRFToken();
+        const response = await fetch('/api/logout', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken
+            },
+            credentials: 'include'
+        });
+
+        if (response.ok) {
+            console.log('Logout successful');
+            window.location.href = '/login.html';
+        } else {
+            console.error('Logout failed');
+        }
+    } catch (error) {
+        console.error('Error during logout:', error);
+    }
+}
+
 async function initializeQuiz() {
     const isAuthenticated = await checkAuthentication();
     if (!isAuthenticated) {
@@ -213,6 +236,7 @@ async function initializeQuiz() {
     const submitButton = document.getElementById('submit-quiz');
     const resetButton = document.getElementById('reset-quiz');
     const quitButton = document.getElementById('quit-quiz');
+    const logoutButton = document.getElementById('logout-button');
 
     if (!quizContainer) {
         console.error('question-list element not found. Quiz cannot be initialized.');
@@ -220,7 +244,7 @@ async function initializeQuiz() {
     }
 
     loadQuiz();
-    updateLeaderboard(); // Add this line to initialize the leaderboard
+    updateLeaderboard();
 
     if (submitButton) {
         submitButton.addEventListener('click', () => {
@@ -253,6 +277,10 @@ async function initializeQuiz() {
                 window.location.href = '/';
             }
         });
+    }
+
+    if (logoutButton) {
+        logoutButton.addEventListener('click', handleLogout);
     }
 }
 
