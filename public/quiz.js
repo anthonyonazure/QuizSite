@@ -124,24 +124,41 @@ function answerQuestion(index, answer) {
             button.classList.add('selected');
         }
     });
-    currentQuestions[index].userAnswer = answer;
+    currentQuestions[index].userAnswer = answer ? '1' : '0';
+    console.log(`Question ${index + 1} answered:`, { 
+        userAnswer: currentQuestions[index].userAnswer,
+        correctAnswer: currentQuestions[index].correctAnswer
+    });
 }
 
 function calculateScore() {
     let score = 0;
     let answeredQuestions = 0;
-    currentQuestions.forEach(q => {
+    currentQuestions.forEach((q, index) => {
+        console.log(`Calculating score for question ${index + 1}:`, {
+            userAnswer: q.userAnswer,
+            correctAnswer: q.correctAnswer,
+            userAnswerType: typeof q.userAnswer,
+            correctAnswerType: typeof q.correctAnswer
+        });
         if (q.userAnswer !== undefined) {
             answeredQuestions++;
-            if (q.userAnswer === q.correctAnswer) {
+            if (String(q.userAnswer) === String(q.correctAnswer)) {
                 score++;
+                console.log(`Question ${index + 1} is correct`);
+            } else {
+                console.log(`Question ${index + 1} is incorrect`);
             }
+        } else {
+            console.log(`Question ${index + 1} was not answered`);
         }
     });
+    console.log(`Final calculation: Score ${score}, Answered Questions ${answeredQuestions}`);
     return { score, answeredQuestions };
 }
 
 function showResult() {
+    console.log('Showing results...');
     const quizContainer = document.getElementById('question-list');
     if (quizContainer) {
         const questionElements = quizContainer.getElementsByTagName('li');
@@ -150,10 +167,17 @@ function showResult() {
             const userAnswer = currentQuestions[i].userAnswer;
             const correctAnswer = currentQuestions[i].correctAnswer;
             
+            console.log(`Question ${i + 1}:`);
+            console.log(`  Text: ${currentQuestions[i].text}`);
+            console.log(`  User Answer: ${userAnswer}`);
+            console.log(`  Correct Answer: ${correctAnswer}`);
+            console.log(`  Type of User Answer: ${typeof userAnswer}`);
+            console.log(`  Type of Correct Answer: ${typeof correctAnswer}`);
+            
             if (userAnswer === undefined) {
                 resultIndicator.textContent = 'Not answered';
                 resultIndicator.style.color = 'orange';
-            } else if (userAnswer === correctAnswer) {
+            } else if (String(userAnswer) === String(correctAnswer)) {
                 resultIndicator.textContent = 'Correct';
                 resultIndicator.style.color = 'green';
             } else {
@@ -164,6 +188,7 @@ function showResult() {
     }
     
     const { score, answeredQuestions } = calculateScore();
+    console.log(`Final Score: ${score} out of ${answeredQuestions}`);
     const resultDiv = document.getElementById('result');
     if (resultDiv) {
         resultDiv.innerHTML = `<p>You scored ${score} out of ${answeredQuestions}</p>`;
