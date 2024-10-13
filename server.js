@@ -108,7 +108,7 @@ app.get('/api/check-login', (req, res) => {
   }
 });
 
-// New Questions route
+// Questions route
 app.get('/api/questions', (req, res) => {
   console.log('Fetching questions...');
   console.log('Session ID:', req.session.id);
@@ -140,9 +140,82 @@ app.get('/api/questions', (req, res) => {
 
 // ... (keep all existing routes and endpoints)
 
-// New Profile route
+// Updated Profile route
 app.get('/api/profile', (req, res) => {
-  // ... (keep existing profile route code)
+  console.log('Fetching profile data...');
+  console.log('Session ID:', req.session.id);
+  console.log('Session data:', req.session);
+
+  if (!req.session.userId) {
+    console.log('User not authenticated');
+    return res.status(401).json({ message: 'Not authenticated' });
+  }
+
+  console.log('User authenticated, fetching profile data');
+
+  const userId = req.session.userId;
+
+  // Query to fetch user data
+  const userDataQuery = `
+    SELECT email, redditHandle, totalQuestions, totalCorrect, 
+           CAST(totalCorrect AS FLOAT) / CASE WHEN totalQuestions = 0 THEN 1 ELSE totalQuestions END * 100 as percentCorrect,
+           previousRank
+    FROM users
+    WHERE id = ?
+  `;
+
+  // Query to calculate user's rank
+  const rankQuery = `
+    SELECT COUNT(*) + 1 as rank
+    FROM users
+    WHERE CAST(totalCorrect AS FLOAT) / CASE WHEN totalQuestions = 0 THEN 1 ELSE totalQuestions END > 
+          (SELECT CAST(totalCorrect AS FLOAT) / CASE WHEN totalQuestions = 0 THEN 1 ELSE totalQuestions END
+           FROM users WHERE id = ?)
+  `;
+
+  db.get(userDataQuery, [userId], (err, userData) => {
+    if (err) {
+      console.error('Error fetching user data:', err.message);
+      return res.status(500).json({ error: 'Internal server error', details: err.message });
+    }
+    if (!userData) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    db.get(rankQuery, [userId], (err, rankData) => {
+      if (err) {
+        console.error('Error calculating rank:', err.message);
+        return res.status(500).json({ error: 'Internal server error', details: err.message });
+      }
+
+      const calculatedRank = rankData.rank;
+
+      // Update the rank in the database
+      db.run('UPDATE users SET rank = ? WHERE id = ?', [calculatedRank, userId], (err) => {
+        if (err) {
+          console.error('Error updating rank:', err.message);
+          // Continue with the response even if updating the rank fails
+        }
+
+        const quizzesTaken = Math.floor(userData.totalQuestions / 10);
+
+        const profileData = {
+          email: userData.email,
+          redditHandle: userData.redditHandle,
+          totalQuestions: userData.totalQuestions || 0,
+          totalCorrect: userData.totalCorrect || 0,
+          percentCorrect: userData.percentCorrect || 0,
+          rank: calculatedRank,
+          similarQuestionsRank: 'N/A', // We don't have this information
+          percentCorrectTrend: userData.previousRank ? calculatedRank - userData.previousRank : 0,
+          quizzesTaken: quizzesTaken
+        };
+
+        console.log('Fetched profile data:', profileData);
+        res.json(profileData);
+      });
+    });
+  });
 });
 
 // Start the server
