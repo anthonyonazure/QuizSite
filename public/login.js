@@ -96,4 +96,42 @@ document.addEventListener('DOMContentLoaded', () => {
     if (logoutButton) {
         logoutButton.addEventListener('click', handleLogout);
     }
+
+    updateLeaderboard();
 });
+
+async function fetchLeaderboard() {
+    try {
+        const response = await fetch('/api/leaderboard');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching leaderboard:', error);
+        throw error;
+    }
+}
+
+function displayLeaderboard(leaderboardData) {
+    const leaderboardBody = document.querySelector('#leaderboard tbody');
+    if (leaderboardBody) {
+        leaderboardBody.innerHTML = leaderboardData.map((user, index) => `
+            <tr>
+                <td>${index + 1}</td>
+                <td>${user.redditHandle}</td>
+                <td>${user.quizzesTaken}</td>
+                <td>${user.percentCorrect.toFixed(2)}%</td>
+            </tr>
+        `).join('');
+    }
+}
+
+async function updateLeaderboard() {
+    try {
+        const leaderboardData = await fetchLeaderboard();
+        displayLeaderboard(leaderboardData);
+    } catch (error) {
+        console.error('Error updating leaderboard:', error);
+    }
+}
