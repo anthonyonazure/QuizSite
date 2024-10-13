@@ -76,8 +76,16 @@ app.post('/api/login', async (req, res) => {
       const isPasswordValid = await bcrypt.compare(password, user.password);
       if (isPasswordValid) {
         req.session.userId = user.id;
+        req.session.isAdmin = user.isAdmin;
         console.log('Login successful. Session ID:', req.session.id);
-        res.json({ message: 'Login successful', user: { redditHandle: user.redditHandle, email: user.email } });
+        res.json({ 
+          message: 'Login successful', 
+          user: { 
+            redditHandle: user.redditHandle, 
+            email: user.email,
+            isAdmin: user.isAdmin
+          } 
+        });
       } else {
         console.log('Invalid password');
         res.status(401).json({ message: 'Invalid credentials' });
@@ -108,6 +116,25 @@ app.get('/api/check-login', (req, res) => {
   }
 });
 
+// Check admin status route
+app.get('/api/check-admin', (req, res) => {
+  console.log('Checking admin status. Session ID:', req.session.id);
+  console.log('Session data:', req.session);
+  
+  if (!req.session.userId) {
+    console.log('User not logged in');
+    return res.status(401).json({ isAdmin: false, message: 'User not logged in' });
+  }
+  
+  if (req.session.isAdmin) {
+    console.log('User is admin');
+    res.json({ isAdmin: true });
+  } else {
+    console.log('User is not admin');
+    res.json({ isAdmin: false });
+  }
+});
+
 // Questions route
 app.get('/api/questions', (req, res) => {
   console.log('Fetching questions...');
@@ -134,6 +161,34 @@ app.get('/api/questions', (req, res) => {
       return res.status(500).json({ error: 'Internal server error', details: err.message });
     }
     console.log('Fetched questions:', rows);
+    res.json(rows);
+  });
+});
+
+// Get all users route
+app.get('/api/users', (req, res) => {
+  console.log('Fetching users...');
+  console.log('Session ID:', req.session.id);
+  console.log('Session data:', req.session);
+
+  if (!req.session.userId || !req.session.isAdmin) {
+    console.log('User not authenticated or not admin');
+    return res.status(401).json({ message: 'Not authorized' });
+  }
+
+  console.log('Admin authenticated, fetching users');
+
+  const query = `
+    SELECT id, email, redditHandle, firstName, lastName, isAdmin
+    FROM users
+  `;
+
+  db.all(query, [], (err, rows) => {
+    if (err) {
+      console.error('Error fetching users:', err.message);
+      return res.status(500).json({ error: 'Internal server error', details: err.message });
+    }
+    console.log('Fetched users:', rows);
     res.json(rows);
   });
 });

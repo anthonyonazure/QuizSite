@@ -1,15 +1,5 @@
 let users = [];
-
-function showNotification(message, isError = false) {
-    const notificationElement = document.createElement('div');
-    notificationElement.textContent = message;
-    notificationElement.className = `notification ${isError ? 'error' : 'success'}`;
-    document.body.appendChild(notificationElement);
-
-    setTimeout(() => {
-        notificationElement.remove();
-    }, 5000);
-}
+let editingUserId = null;
 
 async function fetchUsers() {
     try {
@@ -17,114 +7,116 @@ async function fetchUsers() {
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        users = await response.json();
+        const data = await response.json();
+        users = data;
         displayUsers();
     } catch (error) {
         console.error('Error fetching users:', error);
-        showNotification('Error fetching users. Please try again later.', true);
     }
 }
 
 function displayUsers() {
-    const tableBody = document.querySelector('#users-table tbody');
-    tableBody.innerHTML = users.map(user => `
-        <tr>
-            <td>${user.id}</td>
-            <td>${user.redditHandle}</td>
-            <td>${user.email}</td>
-            <td>
-                <button onclick="editUser(${user.id})">Edit</button>
-                <button onclick="deleteUser(${user.id})">Delete</button>
-            </td>
-        </tr>
-    `).join('');
+    const userList = document.getElementById('user-list');
+    userList.innerHTML = '';
+    users.forEach(user => {
+        const userDiv = document.createElement('div');
+        userDiv.innerHTML = `
+            <p>Email: ${user.email}</p>
+            <p>Reddit Handle: ${user.redditHandle}</p>
+            <p>Name: ${user.firstName} ${user.lastName}</p>
+            <p>Total Questions: ${user.totalQuestions}</p>
+            <p>Total Correct: ${user.totalCorrect}</p>
+            <p>Rank: ${user.rank}</p>
+            <p>Admin: ${user.isAdmin ? 'Yes' : 'No'}</p>
+            <button onclick="editUser(${user.id})">Edit</button>
+        `;
+        userList.appendChild(userDiv);
+    });
 }
 
-async function addUser(event) {
+function showUserForm(isEditing = false) {
+    const form = document.getElementById('user-form');
+    form.style.display = 'block';
+}
+
+function hideUserForm() {
+    const form = document.getElementById('user-form');
+    form.style.display = 'none';
+    document.getElementById('edit-user-form').reset();
+    editingUserId = null;
+}
+
+async function saveUser(event) {
     event.preventDefault();
-    const redditHandle = document.getElementById('new-reddit-handle').value;
-    const email = document.getElementById('new-email').value;
-    const password = document.getElementById('new-password').value;
+    const email = document.getElementById('email').value;
+    const redditHandle = document.getElementById('redditHandle').value;
+    const firstName = document.getElementById('firstName').value;
+    const lastName = document.getElementById('lastName').value;
+    const totalQuestions = parseInt(document.getElementById('totalQuestions').value);
+    const totalCorrect = parseInt(document.getElementById('totalCorrect').value);
+    const rank = parseInt(document.getElementById('rank').value);
+    const isAdmin = document.getElementById('isAdmin').checked;
 
     try {
-        const response = await fetch('/api/users', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ redditHandle, email, password }),
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const newUser = await response.json();
-        users.push(newUser);
-        displayUsers();
-        document.getElementById('add-user-form').reset();
-        showNotification('User added successfully');
-    } catch (error) {
-        console.error('Error adding user:', error);
-        showNotification('Error adding user. Please try again.', true);
-    }
-}
-
-async function editUser(userId) {
-    const user = users.find(u => u.id === userId);
-    if (!user) return;
-
-    const newRedditHandle = prompt('Enter new Reddit handle:', user.redditHandle);
-    const newEmail = prompt('Enter new email:', user.email);
-
-    if (newRedditHandle === null || newEmail === null) return;
-
-    try {
-        const response = await fetch(`/api/users/${userId}`, {
+        const response = await fetch(`/api/users/${editingUserId}`, {
             method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ redditHandle: newRedditHandle, email: newEmail }),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                email, 
+                redditHandle, 
+                firstName, 
+                lastName, 
+                totalQuestions, 
+                totalCorrect, 
+                rank, 
+                isAdmin 
+            })
         });
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        if (response.ok) {
+            await fetchUsers();
+            hideUserForm();
+        } else {
+            console.error('Error saving user:', await response.text());
         }
-
-        const updatedUser = await response.json();
-        const index = users.findIndex(u => u.id === userId);
-        users[index] = updatedUser;
-        displayUsers();
-        showNotification('User updated successfully');
     } catch (error) {
-        console.error('Error updating user:', error);
-        showNotification('Error updating user. Please try again.', true);
+        console.error('Error saving user:', error);
     }
 }
 
-async function deleteUser(userId) {
-    if (!confirm('Are you sure you want to delete this user?')) return;
-
-    try {
-        const response = await fetch(`/api/users/${userId}`, {
-            method: 'DELETE',
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        users = users.filter(u => u.id !== userId);
-        displayUsers();
-        showNotification('User deleted successfully');
-    } catch (error) {
-        console.error('Error deleting user:', error);
-        showNotification('Error deleting user. Please try again.', true);
+function editUser(userId) {
+    const user = users.find(u => u.id === userId);
+    if (user) {
+        document.getElementById('email').value = user.email;
+        document.getElementById('redditHandle').value = user.redditHandle;
+        document.getElementById('firstName').value = user.firstName || '';
+        document.getElementById('lastName').value = user.lastName || '';
+        document.getElementById('totalQuestions').value = user.totalQuestions || 0;
+        document.getElementById('totalCorrect').value = user.totalCorrect || 0;
+        document.getElementById('rank').value = user.rank || 0;
+        document.getElementById('isAdmin').checked = user.isAdmin || false;
+        editingUserId = userId;
+        showUserForm(true);
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    fetchUsers();
-    document.getElementById('add-user-form').addEventListener('submit', addUser);
-});
+async function resetPassword() {
+    if (editingUserId) {
+        try {
+            const response = await fetch(`/api/users/${editingUserId}/reset-password`, { method: 'POST' });
+            if (response.ok) {
+                alert('Password reset successfully. A new password has been sent to the user\'s email.');
+            } else {
+                console.error('Error resetting password:', await response.text());
+            }
+        } catch (error) {
+            console.error('Error resetting password:', error);
+        }
+    }
+}
+
+document.getElementById('edit-user-form').addEventListener('submit', saveUser);
+document.getElementById('cancel-btn').addEventListener('click', hideUserForm);
+document.getElementById('reset-password-btn').addEventListener('click', resetPassword);
+
+fetchUsers();

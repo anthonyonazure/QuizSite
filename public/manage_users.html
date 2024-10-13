@@ -9,72 +9,33 @@
 <body>
     <div class="container">
         <h1>Manage Users</h1>
-        <div id="admin-content" style="display: none;">
-            <table id="users-table">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Reddit Handle</th>
-                        <th>Email</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- User data will be dynamically loaded here -->
-                </tbody>
-            </table>
-            
-            <h2>Add New User</h2>
-            <form id="add-user-form">
-                <div>
-                    <label for="new-reddit-handle">Reddit Handle:</label>
-                    <input type="text" id="new-reddit-handle" required>
-                </div>
-                <div>
-                    <label for="new-email">Email:</label>
-                    <input type="email" id="new-email" required>
-                </div>
-                <div>
-                    <label for="new-password">Password:</label>
-                    <input type="password" id="new-password" required>
-                </div>
-                <button type="submit">Add User</button>
+        <div id="user-list"></div>
+        <div id="user-form" style="display: none;">
+            <h2>Edit User</h2>
+            <form id="edit-user-form">
+                <label for="email">Email:</label>
+                <input type="email" id="email" required>
+                <label for="redditHandle">Reddit Handle:</label>
+                <input type="text" id="redditHandle" required>
+                <label for="firstName">First Name:</label>
+                <input type="text" id="firstName">
+                <label for="lastName">Last Name:</label>
+                <input type="text" id="lastName">
+                <label for="totalQuestions">Total Questions:</label>
+                <input type="number" id="totalQuestions">
+                <label for="totalCorrect">Total Correct:</label>
+                <input type="number" id="totalCorrect">
+                <label for="rank">Rank:</label>
+                <input type="number" id="rank">
+                <label for="isAdmin">Is Admin:</label>
+                <input type="checkbox" id="isAdmin">
+                <button type="submit">Save Changes</button>
+                <button type="button" id="reset-password-btn">Reset Password</button>
+                <button type="button" id="cancel-btn">Cancel</button>
             </form>
-            
-            <a href="admin.html">Back to Admin Dashboard</a>
         </div>
-        <div id="login-message" style="display: none;">
-            <p>You must be logged in as an admin to access this page.</p>
-            <a href="login.html">Login</a>
-        </div>
+        <a href="admin.html">Back to Admin Dashboard</a>
     </div>
-    <script>
-        async function checkAdminStatus() {
-            try {
-                const response = await fetch('/api/check-admin', {
-                    method: 'GET',
-                    credentials: 'include'
-                });
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const data = await response.json();
-                if (data.isAdmin) {
-                    document.getElementById('admin-content').style.display = 'block';
-                    // Load the manage_users.js script only if the user is an admin
-                    const script = document.createElement('script');
-                    script.src = 'manage_users.js';
-                    document.body.appendChild(script);
-                } else {
-                    document.getElementById('login-message').style.display = 'block';
-                }
-            } catch (error) {
-                console.error('Error checking admin status:', error);
-                document.getElementById('login-message').style.display = 'block';
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded', checkAdminStatus);
-    </script>
+    <script src="manage_users.js"></script>
 </body>
 </html>
