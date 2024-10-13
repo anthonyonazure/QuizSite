@@ -37,7 +37,21 @@ app.use(session({
   saveUninitialized: true,
   cookie: { secure: false } // Set to true if using https
 }));
-app.use(csrf({ cookie: true }));
+
+// Modify CSRF token middleware
+app.use(csrf({ 
+  cookie: true,
+  ignoreMethods: ['GET', 'HEAD', 'OPTIONS'],
+  value: (req) => {
+    return req.headers['x-csrf-token'];
+  }
+}));
+
+// Add middleware to handle CSRF errors
+app.use((err, req, res, next) => {
+  if (err.code !== 'EBADCSRFTOKEN') return next(err);
+  res.status(403).json({ message: 'Invalid CSRF token' });
+});
 
 // Logging middleware
 app.use((req, res, next) => {
@@ -100,9 +114,23 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// CSRF token route
+// Logout route
+app.post('/api/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      console.error('Error destroying session:', err);
+      return res.status(500).json({ message: 'Error logging out' });
+    }
+    res.clearCookie('connect.sid'); // Clear the session cookie
+    res.json({ message: 'Logged out successfully' });
+  });
+});
+
+// Updated CSRF token route
 app.get('/api/csrf-token', (req, res) => {
-  res.json({ csrfToken: req.csrfToken() });
+  const token = req.csrfToken();
+  res.cookie('XSRF-TOKEN', token);
+  res.json({ csrfToken: token });
 });
 
 // Check login status route
@@ -193,7 +221,25 @@ app.get('/api/users', (req, res) => {
   });
 });
 
-// ... (keep all existing routes and endpoints)
+// Leaderboard route
+app.get('/api/leaderboard', (req, res) => {
+  const query = `
+    SELECT redditHandle, quizzesTaken, 
+           CAST(totalCorrect AS FLOAT) / CASE WHEN totalQuestions = 0 THEN 1 ELSE totalQuestions END * 100 as percentCorrect,
+           rank
+    FROM users
+    ORDER BY percentCorrect DESC
+    LIMIT 10
+  `;
+
+  db.all(query, [], (err, rows) => {
+    if (err) {
+      console.error('Error fetching leaderboard:', err.message);
+      return res.status(500).json({ error: 'Internal server error', details: err.message });
+    }
+    res.json(rows);
+  });
+});
 
 // Updated Profile route
 app.get('/api/profile', (req, res) => {

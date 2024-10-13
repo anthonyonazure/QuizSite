@@ -78,6 +78,12 @@ async function loadQuiz() {
         currentQuestionIndex = 0;
         displayQuestionPlaceholders();
         hideLoading();
+        
+        // Add this block to show the submit button
+        const submitButton = document.getElementById('submit-quiz');
+        if (submitButton) {
+            submitButton.style.display = 'inline-block';
+        }
     } catch (error) {
         console.error('Error loading quiz:', error);
         const quizContainer = document.getElementById('question-list');
@@ -92,7 +98,7 @@ function displayQuestionPlaceholders() {
     const quizContainer = document.getElementById('question-list');
     if (quizContainer) {
         const questionsHTML = currentQuestions.map((_, index) => `
-            <li>
+            <li style="list-style-type: none;">
                 <p>Statement ${index + 1}</p>
                 <button class="quiz-button" onclick="answerQuestion(${index}, true)">True</button>
                 <button class="quiz-button" onclick="answerQuestion(${index}, false)">False</button>
@@ -214,6 +220,7 @@ async function initializeQuiz() {
     }
 
     loadQuiz();
+    updateLeaderboard(); // Add this line to initialize the leaderboard
 
     if (submitButton) {
         submitButton.addEventListener('click', () => {
@@ -250,3 +257,39 @@ async function initializeQuiz() {
 }
 
 document.addEventListener('DOMContentLoaded', initializeQuiz);
+
+async function fetchLeaderboard() {
+    try {
+        const response = await fetch('/api/leaderboard');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching leaderboard:', error);
+        throw error;
+    }
+}
+
+function displayLeaderboard(leaderboardData) {
+    const leaderboardBody = document.getElementById('leaderboard-body');
+    if (leaderboardBody) {
+        leaderboardBody.innerHTML = leaderboardData.map((user, index) => `
+            <tr>
+                <td>${index + 1}</td>
+                <td>${user.redditHandle}</td>
+                <td>${user.quizzesTaken}</td>
+                <td>${user.percentCorrect.toFixed(2)}%</td>
+            </tr>
+        `).join('');
+    }
+}
+
+async function updateLeaderboard() {
+    try {
+        const leaderboardData = await fetchLeaderboard();
+        displayLeaderboard(leaderboardData);
+    } catch (error) {
+        console.error('Error updating leaderboard:', error);
+    }
+}
