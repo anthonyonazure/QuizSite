@@ -6,6 +6,7 @@ const csrf = require('csurf');
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcryptjs');
 const session = require('express-session');
+const nodemailer = require('nodemailer');
 
 console.log('Server starting...');
 
@@ -364,6 +365,45 @@ app.get('/api/profile', (req, res) => {
       });
     });
   });
+});
+
+// Contact route
+app.post('/api/contact', async (req, res) => {
+  const { email, subject, message } = req.body;
+  console.log('Contact form submission:', { email, subject, message });
+
+  // Create a test account using Ethereal Email
+  let testAccount = await nodemailer.createTestAccount();
+
+  // Create a transporter using the test account
+  let transporter = nodemailer.createTransport({
+    host: "smtp.ethereal.email",
+    port: 587,
+    secure: false, // Use TLS
+    auth: {
+      user: testAccount.user,
+      pass: testAccount.pass,
+    },
+  });
+
+  try {
+    // Send mail with defined transport object
+    let info = await transporter.sendMail({
+      from: `"Contact Form" <${email}>`,
+      to: "your-email@example.com", // Replace with your email address
+      subject: subject,
+      text: message,
+      html: `<p>${message}</p>`,
+    });
+
+    console.log("Message sent: %s", info.messageId);
+    console.log("Preview URL: %s", nodemailer.getTestMessageUrl(info));
+
+    res.status(200).json({ message: 'Email sent successfully' });
+  } catch (error) {
+    console.error('Error sending email:', error);
+    res.status(500).json({ message: 'Failed to send email', error: error.message });
+  }
 });
 
 // Start the server

@@ -1,3 +1,9 @@
+async function fetchCSRFToken() {
+    const response = await fetch('/api/csrf-token');
+    const data = await response.json();
+    return data.csrfToken;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const contactForm = document.getElementById('contact-form');
     const cancelButton = document.getElementById('cancel-button');
@@ -12,23 +18,27 @@ document.addEventListener('DOMContentLoaded', () => {
         const message = formData.get('message');
 
         try {
+            const csrfToken = await fetchCSRFToken();
             const response = await fetch('/api/contact', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
                 },
                 body: JSON.stringify({ email, subject, message }),
+                credentials: 'include'
             });
 
             if (response.ok) {
                 showStatusMessage('Message sent successfully!', 'success');
                 contactForm.reset();
             } else {
-                throw new Error('Failed to send message');
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to send message');
             }
         } catch (error) {
             console.error('Error sending message:', error);
-            showStatusMessage('Failed to send message. Please try again later.', 'error');
+            showStatusMessage(`Failed to send message: ${error.message}`, 'error');
         }
     });
 
