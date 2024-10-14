@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const jwt = require('jsonwebtoken');
@@ -7,13 +8,17 @@ const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcryptjs');
 const session = require('express-session');
 const nodemailer = require('nodemailer');
+const Joi = require('joi');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
+const sgMail = require('@sendgrid/mail');
 
 console.log('Server starting...');
 
 const app = express();
 let PORT = process.env.PORT || 5000;
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_here';
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // SQLite database connection
 const db = new sqlite3.Database('./database.sqlite', (err) => {
@@ -33,13 +38,13 @@ function initializeDatabase() {
 app.use(express.json());
 app.use(cookieParser());
 app.use(session({
-  secret: 'your_session_secret',
+  secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: true,
-  cookie: { secure: false } // Set to true if using https
+  cookie: { secure: process.env.NODE_ENV === 'production' }
 }));
 
-// Modify CSRF token middleware
+// CSRF protection
 app.use(csrf({ 
   cookie: true,
   ignoreMethods: ['GET', 'HEAD', 'OPTIONS'],
@@ -54,111 +59,125 @@ app.use((err, req, res, next) => {
   res.status(403).json({ message: 'Invalid CSRF token' });
 });
 
-// Logging middleware
+// Logging middleware (removed sensitive information logging)
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
   next();
 });
 
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100 // limit each IP to 100 requests per windowMs
+});
+app.use('/api/', limiter);
+
+// Helmet for security headers
+app.use(helmet());
+
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Input validation schemas
+const registerSchema = Joi.object({
+  redditHandle: Joi.string().required(),
+  email: Joi.string().email().required(),
+  password: Joi.string().min(8).required(),
+  firstName: Joi.string().required(),
+  lastName: Joi.string().required()
+});
+
+const loginSchema = Joi.object({
+  username: Joi.string().required(),
+  password: Joi.string().required()
+});
 
 // Root route
 app.get('/', (req, res) => {
   if (req.session.userId) {
-    // If user is logged in, redirect to quiz page
     res.redirect('/quiz.html');
   } else {
-    // If user is not logged in, redirect to login page
     res.redirect('/login.html');
   }
 });
 
 // Login route
 app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
-  console.log(`Login attempt for user: ${username}`);
-
   try {
-    const user = await new Promise((resolve, reject) => {
-      db.get('SELECT * FROM users WHERE redditHandle = ? OR email = ?', [username, username], (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
-      });
-    });
+    await loginSchema.validateAsync(req.body);
+    const { username, password } = req.body;
 
-    if (user) {
-      const isPasswordValid = await bcrypt.compare(password, user.password);
-      if (isPasswordValid) {
-        req.session.userId = user.id;
-        req.session.isAdmin = user.isAdmin;
-        console.log('Login successful. Session ID:', req.session.id);
-        res.json({ 
-          message: 'Login successful', 
-          user: { 
-            redditHandle: user.redditHandle, 
-            email: user.email,
-            isAdmin: user.isAdmin
-          } 
-        });
+    db.get('SELECT * FROM users WHERE redditHandle = ? OR email = ?', [username, username], async (err, user) => {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ message: 'Internal server error' });
+      }
+      if (user) {
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        if (isPasswordValid) {
+          req.session.userId = user.id;
+          req.session.isAdmin = user.isAdmin;
+          res.json({ 
+            message: 'Login successful', 
+            user: { 
+              redditHandle: user.redditHandle, 
+              email: user.email,
+              isAdmin: user.isAdmin
+            } 
+          });
+        } else {
+          res.status(401).json({ message: 'Invalid credentials' });
+        }
       } else {
-        console.log('Invalid password');
         res.status(401).json({ message: 'Invalid credentials' });
       }
-    } else {
-      console.log('User not found');
-      res.status(401).json({ message: 'Invalid credentials' });
-    }
+    });
   } catch (error) {
+    if (error.isJoi) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
     console.error('Login error:', error);
-    res.status(500).json({ message: 'Error during login', error: error.message });
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
 // Registration route
 app.post('/api/register', async (req, res) => {
-  const { redditHandle, email, password, firstName, lastName } = req.body;
-  console.log(`Registration attempt for user: ${redditHandle}`);
-
   try {
-    // Check if user already exists
-    const existingUser = await new Promise((resolve, reject) => {
-      db.get('SELECT * FROM users WHERE redditHandle = ? OR email = ?', [redditHandle, email], (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
-      });
-    });
+    await registerSchema.validateAsync(req.body);
+    const { redditHandle, email, password, firstName, lastName } = req.body;
 
-    if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
-    }
+    db.get('SELECT * FROM users WHERE redditHandle = ? OR email = ?', [redditHandle, email], async (err, existingUser) => {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ message: 'Internal server error' });
+      }
+      if (existingUser) {
+        return res.status(400).json({ message: 'User already exists' });
+      }
 
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Insert new user into the database
-    const result = await new Promise((resolve, reject) => {
+      const hashedPassword = await bcrypt.hash(password, 10);
       const createdAt = new Date().toISOString();
       const updatedAt = createdAt;
-      db.run(`INSERT INTO users (
-        redditHandle, email, password, firstName, lastName, createdAt, updatedAt, 
-        totalQuestions, totalCorrect, rank, isAdmin
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
-        [redditHandle, email, hashedPassword, firstName, lastName, createdAt, updatedAt, 
-         0, 0, 0, false], 
+
+      db.run(`INSERT INTO users (redditHandle, email, password, firstName, lastName, createdAt, updatedAt, totalQuestions, totalCorrect, rank, isAdmin) 
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
+        [redditHandle, email, hashedPassword, firstName, lastName, createdAt, updatedAt, 0, 0, 0, false], 
         function(err) {
-          if (err) reject(err);
-          else resolve(this);
+          if (err) {
+            console.error('Registration error:', err);
+            return res.status(500).json({ message: 'Error during registration' });
+          }
+          res.status(201).json({ message: 'User registered successfully' });
         }
       );
     });
-
-    console.log('Registration successful');
-    res.status(201).json({ message: 'User registered successfully' });
   } catch (error) {
+    if (error.isJoi) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
     console.error('Registration error:', error);
-    console.error('Error details:', error.message);
-    res.status(500).json({ message: 'Error during registration', error: error.message });
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
@@ -169,7 +188,7 @@ app.post('/api/logout', (req, res) => {
       console.error('Error destroying session:', err);
       return res.status(500).json({ message: 'Error logging out' });
     }
-    res.clearCookie('connect.sid'); // Clear the session cookie
+    res.clearCookie('connect.sid');
     res.json({ message: 'Logged out successfully' });
   });
 });
@@ -183,8 +202,6 @@ app.get('/api/csrf-token', (req, res) => {
 
 // Check login status route
 app.get('/api/check-login', (req, res) => {
-  console.log('Checking login status. Session ID:', req.session.id);
-  console.log('Session data:', req.session);
   if (req.session.userId) {
     res.json({ loggedIn: true });
   } else {
@@ -194,35 +211,22 @@ app.get('/api/check-login', (req, res) => {
 
 // Check admin status route
 app.get('/api/check-admin', (req, res) => {
-  console.log('Checking admin status. Session ID:', req.session.id);
-  console.log('Session data:', req.session);
-  
   if (!req.session.userId) {
-    console.log('User not logged in');
     return res.status(401).json({ isAdmin: false, message: 'User not logged in' });
   }
   
   if (req.session.isAdmin) {
-    console.log('User is admin');
     res.json({ isAdmin: true });
   } else {
-    console.log('User is not admin');
     res.json({ isAdmin: false });
   }
 });
 
 // Questions route
 app.get('/api/questions', (req, res) => {
-  console.log('Fetching questions...');
-  console.log('Session ID:', req.session.id);
-  console.log('Session data:', req.session);
-
   if (!req.session.userId) {
-    console.log('User not authenticated');
     return res.status(401).json({ message: 'Not authenticated' });
   }
-
-  console.log('User authenticated, fetching questions');
 
   const query = `
     SELECT id, statement AS text, answer AS correctAnswer
@@ -234,25 +238,17 @@ app.get('/api/questions', (req, res) => {
   db.all(query, [], (err, rows) => {
     if (err) {
       console.error('Error fetching questions:', err.message);
-      return res.status(500).json({ error: 'Internal server error', details: err.message });
+      return res.status(500).json({ error: 'Internal server error' });
     }
-    console.log('Fetched questions:', rows);
     res.json(rows);
   });
 });
 
 // Get all users route
 app.get('/api/users', (req, res) => {
-  console.log('Fetching users...');
-  console.log('Session ID:', req.session.id);
-  console.log('Session data:', req.session);
-
   if (!req.session.userId || !req.session.isAdmin) {
-    console.log('User not authenticated or not admin');
     return res.status(401).json({ message: 'Not authorized' });
   }
-
-  console.log('Admin authenticated, fetching users');
 
   const query = `
     SELECT id, email, redditHandle, firstName, lastName, isAdmin
@@ -262,9 +258,8 @@ app.get('/api/users', (req, res) => {
   db.all(query, [], (err, rows) => {
     if (err) {
       console.error('Error fetching users:', err.message);
-      return res.status(500).json({ error: 'Internal server error', details: err.message });
+      return res.status(500).json({ error: 'Internal server error' });
     }
-    console.log('Fetched users:', rows);
     res.json(rows);
   });
 });
@@ -283,7 +278,7 @@ app.get('/api/leaderboard', (req, res) => {
   db.all(query, [], (err, rows) => {
     if (err) {
       console.error('Error fetching leaderboard:', err.message);
-      return res.status(500).json({ error: 'Internal server error', details: err.message });
+      return res.status(500).json({ error: 'Internal server error' });
     }
     res.json(rows);
   });
@@ -291,20 +286,12 @@ app.get('/api/leaderboard', (req, res) => {
 
 // Updated Profile route
 app.get('/api/profile', (req, res) => {
-  console.log('Fetching profile data...');
-  console.log('Session ID:', req.session.id);
-  console.log('Session data:', req.session);
-
   if (!req.session.userId) {
-    console.log('User not authenticated');
     return res.status(401).json({ message: 'Not authenticated' });
   }
 
-  console.log('User authenticated, fetching profile data');
-
   const userId = req.session.userId;
 
-  // Query to fetch user data
   const userDataQuery = `
     SELECT email, redditHandle, totalQuestions, totalCorrect, 
            CAST(totalCorrect AS FLOAT) / CASE WHEN totalQuestions = 0 THEN 1 ELSE totalQuestions END * 100 as percentCorrect,
@@ -313,7 +300,6 @@ app.get('/api/profile', (req, res) => {
     WHERE id = ?
   `;
 
-  // Query to calculate user's rank
   const rankQuery = `
     SELECT COUNT(*) + 1 as rank
     FROM users
@@ -325,7 +311,7 @@ app.get('/api/profile', (req, res) => {
   db.get(userDataQuery, [userId], (err, userData) => {
     if (err) {
       console.error('Error fetching user data:', err.message);
-      return res.status(500).json({ error: 'Internal server error', details: err.message });
+      return res.status(500).json({ error: 'Internal server error' });
     }
     if (!userData) {
       return res.status(404).json({ error: 'User not found' });
@@ -334,16 +320,14 @@ app.get('/api/profile', (req, res) => {
     db.get(rankQuery, [userId], (err, rankData) => {
       if (err) {
         console.error('Error calculating rank:', err.message);
-        return res.status(500).json({ error: 'Internal server error', details: err.message });
+        return res.status(500).json({ error: 'Internal server error' });
       }
 
       const calculatedRank = rankData.rank;
 
-      // Update the rank in the database
       db.run('UPDATE users SET rank = ? WHERE id = ?', [calculatedRank, userId], (err) => {
         if (err) {
           console.error('Error updating rank:', err.message);
-          // Continue with the response even if updating the rank fails
         }
 
         const quizzesTaken = Math.floor(userData.totalQuestions / 10);
@@ -355,55 +339,47 @@ app.get('/api/profile', (req, res) => {
           totalCorrect: userData.totalCorrect || 0,
           percentCorrect: userData.percentCorrect || 0,
           rank: calculatedRank,
-          similarQuestionsRank: 'N/A', // We don't have this information
+          similarQuestionsRank: 'N/A',
           percentCorrectTrend: userData.previousRank ? calculatedRank - userData.previousRank : 0,
           quizzesTaken: quizzesTaken
         };
 
-        console.log('Fetched profile data:', profileData);
         res.json(profileData);
       });
     });
   });
 });
 
-// Contact route
+// Contact route using SendGrid
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
 app.post('/api/contact', async (req, res) => {
   const { email, subject, message } = req.body;
-  console.log('Contact form submission:', { email, subject, message });
 
-  // Create a test account using Ethereal Email
-  let testAccount = await nodemailer.createTestAccount();
-
-  // Create a transporter using the test account
-  let transporter = nodemailer.createTransport({
-    host: "smtp.ethereal.email",
-    port: 587,
-    secure: false, // Use TLS
-    auth: {
-      user: testAccount.user,
-      pass: testAccount.pass,
-    },
-  });
+  const msg = {
+    to: 'your-email@example.com', // Replace with your email
+    from: 'your-sendgrid-verified-sender@example.com', // Replace with your SendGrid verified sender
+    subject: subject,
+    text: message,
+    html: `<p>${message}</p>`,
+  };
 
   try {
-    // Send mail with defined transport object
-    let info = await transporter.sendMail({
-      from: `"Contact Form" <${email}>`,
-      to: "your-email@example.com", // Replace with your email address
-      subject: subject,
-      text: message,
-      html: `<p>${message}</p>`,
-    });
-
-    console.log("Message sent: %s", info.messageId);
-    console.log("Preview URL: %s", nodemailer.getTestMessageUrl(info));
-
+    await sgMail.send(msg);
     res.status(200).json({ message: 'Email sent successfully' });
   } catch (error) {
     console.error('Error sending email:', error);
-    res.status(500).json({ message: 'Failed to send email', error: error.message });
+    if (error.response) {
+      console.error(error.response.body);
+    }
+    res.status(500).json({ message: 'Failed to send email', error: 'Internal server error' });
   }
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ message: 'Something went wrong!', error: 'Internal server error' });
 });
 
 // Start the server
