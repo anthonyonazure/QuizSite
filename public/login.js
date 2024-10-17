@@ -1,21 +1,25 @@
+function secureLog() {}
+function secureError() {}
+function secureWarn() {}
+
 function getCSRFToken() {
     const cookie = document.cookie.split('; ').find(row => row.startsWith('XSRF-TOKEN='));
-    console.log('CSRF Token from cookie:', cookie ? cookie.split('=')[1] : 'Not found');
+    secureLog('CSRF Token from cookie:', cookie ? cookie.split('=')[1] : 'Not found');
     return cookie ? cookie.split('=')[1] : null;
 }
 
 async function fetchCSRFToken() {
     try {
-        console.log('Fetching CSRF token from server');
+        secureLog('Fetching CSRF token from server');
         const response = await fetch('/api/csrf-token');
         if (!response.ok) {
             throw new Error('Failed to fetch CSRF token');
         }
         const data = await response.json();
-        console.log('Received CSRF token:', data.csrfToken);
+        secureLog('Received CSRF token:', data.csrfToken);
         document.cookie = `XSRF-TOKEN=${data.csrfToken}; path=/`;
     } catch (error) {
-        console.error('Error fetching CSRF token:', error);
+        secureError('Error fetching CSRF token:', error);
     }
 }
 
@@ -23,16 +27,16 @@ async function handleLogin(event) {
     event.preventDefault();
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
-    console.log('Login attempt for username:', username);
+    secureLog('Login attempt for username:', username);
 
     try {
         let csrfToken = getCSRFToken();
         if (!csrfToken) {
-            console.log('CSRF token not found, fetching from server');
+            secureLog('CSRF token not found, fetching from server');
             await fetchCSRFToken();
             csrfToken = getCSRFToken();
         }
-        console.log('Using CSRF token:', csrfToken);
+        secureLog('Using CSRF token:', csrfToken);
         const response = await fetch('/api/login', {
             method: 'POST',
             headers: {
@@ -43,10 +47,10 @@ async function handleLogin(event) {
             credentials: 'include'
         });
 
-        console.log('Login response status:', response.status);
+        secureLog('Login response status:', response.status);
         if (response.ok) {
             const data = await response.json();
-            console.log('Login successful:', data);
+            secureLog('Login successful:', data);
             if (data.user.isAdmin) {
                 window.location.href = '/admin.html';
             } else {
@@ -54,11 +58,11 @@ async function handleLogin(event) {
             }
         } else {
             const errorData = await response.json();
-            console.error('Login failed:', errorData);
+            secureError('Login failed:', errorData);
             document.getElementById('error-message').textContent = errorData.message;
         }
     } catch (error) {
-        console.error('Error during login:', error);
+        secureError('Error during login:', error);
         document.getElementById('error-message').textContent = 'An error occurred during login. Please try again.';
     }
 }
@@ -76,13 +80,13 @@ async function handleLogout() {
         });
 
         if (response.ok) {
-            console.log('Logout successful');
+            secureLog('Logout successful');
             window.location.href = '/login.html';
         } else {
-            console.error('Logout failed');
+            secureError('Logout failed');
         }
     } catch (error) {
-        console.error('Error during logout:', error);
+        secureError('Error during logout:', error);
     }
 }
 
@@ -108,7 +112,7 @@ async function fetchLeaderboard() {
         }
         return await response.json();
     } catch (error) {
-        console.error('Error fetching leaderboard:', error);
+        secureError('Error fetching leaderboard:', error);
         throw error;
     }
 }
@@ -132,6 +136,6 @@ async function updateLeaderboard() {
         const leaderboardData = await fetchLeaderboard();
         displayLeaderboard(leaderboardData);
     } catch (error) {
-        console.error('Error updating leaderboard:', error);
+        secureError('Error updating leaderboard:', error);
     }
 }
