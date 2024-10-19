@@ -27,6 +27,7 @@
     "nodemailer": "^6.9.1",
     "sanitize-html": "^2.13.0",
     "sequelize": "^6.37.3",
-    "sqlite3": "^5.1.7"
+    "sqlite3": "^5.1.7",
+    "zxcvbn": "^4.4.2"
   }
 }

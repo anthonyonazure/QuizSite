@@ -12,6 +12,8 @@ const Joi = require('joi');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const sgMail = require('@sendgrid/mail');
+const zxcvbn = require('zxcvbn');
+const cors = require('cors');
 
 console.log('Server starting...');
 
@@ -19,6 +21,12 @@ const app = express();
 let PORT = process.env.PORT || 5000;
 
 const JWT_SECRET = process.env.JWT_SECRET;
+
+// CORS configuration
+const corsOptions = {
+  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : 'http://localhost:5000', 'https:/muscletestology.com'
+  optionsSuccessStatus: 200
+};
 
 // Check if SESSION_SECRET is set, if not, use a default value
 if (!process.env.SESSION_SECRET) {
@@ -189,7 +197,11 @@ app.post('/api/register', async (req, res) => {
       if (existingUser) {
         return res.status(400).json({ message: 'User already exists' });
       }
-
+      // Add password strength check
+      const passwordStrength = zxcvbn(password);
+      if (passwordStrength.score < 3) {
+        return res.status(400).json({ message: 'Password is too weak. Please choose a stronger password.' });
+      }
       const hashedPassword = await bcrypt.hash(password, 10);
       const createdAt = new Date().toISOString();
       const updatedAt = createdAt;
