@@ -24,10 +24,10 @@ const JWT_SECRET = process.env.JWT_SECRET;
 
 // CORS configuration
 const corsOptions = {
-  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : 'http://localhost:5000', 'https:/muscletestology.com'
+  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:5000', 'https://muscletestology.com'],
   optionsSuccessStatus: 200
 };
-
+app.use(cors(corsOptions));
 // Check if SESSION_SECRET is set, if not, use a default value
 if (!process.env.SESSION_SECRET) {
   console.warn('WARNING: SESSION_SECRET is not set. Using a default value. This is not recommended for production.');
