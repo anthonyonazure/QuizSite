@@ -228,7 +228,7 @@ app.post('/api/register', async (req, res) => {
 });
 
 // Logout route
-app.post('/api/logout', (req, res) => {
+app.post('/api/logout', csrf({ ignoreMethods: ['POST'] }), (req, res) => {
   req.session.destroy((err) => {
     if (err) {
       console.error('Error destroying session:', err);
