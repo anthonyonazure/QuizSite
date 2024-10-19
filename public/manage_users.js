@@ -1,6 +1,13 @@
 let users = [];
 let editingUserId = null;
 
+function secureLog(message, error) {
+    // In production, this function could be modified to log to a secure service
+    if (process.env.NODE_ENV !== 'production') {
+        console.error(message, error);
+    }
+}
+
 async function fetchUsers() {
     try {
         const response = await fetch('/api/users');
@@ -11,7 +18,7 @@ async function fetchUsers() {
         users = data;
         displayUsers();
     } catch (error) {
-        console.error('Error fetching users:', error);
+        secureLog('Error fetching users:', error);
     }
 }
 
@@ -77,10 +84,10 @@ async function saveUser(event) {
             await fetchUsers();
             hideUserForm();
         } else {
-            console.error('Error saving user:', await response.text());
+            secureLog('Error saving user:', await response.text());
         }
     } catch (error) {
-        console.error('Error saving user:', error);
+        secureLog('Error saving user:', error);
     }
 }
 
@@ -107,10 +114,10 @@ async function resetPassword() {
             if (response.ok) {
                 alert('Password reset successfully. A new password has been sent to the user\'s email.');
             } else {
-                console.error('Error resetting password:', await response.text());
+                secureLog('Error resetting password:', await response.text());
             }
         } catch (error) {
-            console.error('Error resetting password:', error);
+            secureLog('Error resetting password:', error);
         }
     }
 }

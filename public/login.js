@@ -54,7 +54,7 @@ async function handleLogin(event) {
             if (data.user.isAdmin) {
                 window.location.href = '/admin.html';
             } else {
-                window.location.href = '/quiz.html';
+                window.location.href = '/dashboard.html'; // Changed from '/quiz.html' to '/dashboard.html'
             }
         } else {
             const errorData = await response.json();

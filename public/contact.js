@@ -4,6 +4,13 @@ async function fetchCSRFToken() {
     return data.csrfToken;
 }
 
+function secureLog(message, error) {
+    // In production, this function could be modified to log to a secure service
+    if (process.env.NODE_ENV !== 'production') {
+        console.error(message, error);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const contactForm = document.getElementById('contact-form');
     const cancelButton = document.getElementById('cancel-button');
@@ -37,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(errorData.message || 'Failed to send message');
             }
         } catch (error) {
-            console.error('Error sending message:', error);
+            secureLog('Error sending message:', error);
             showStatusMessage(`Failed to send message: ${error.message}`, 'error');
         }
     });

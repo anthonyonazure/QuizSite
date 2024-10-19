@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome to Your Dashboard</h1>
+        
+        <div id="site-info">
+            <h2>About Our Quiz Platform</h2>
+            <p>Welcome to our interactive quiz platform designed to test and prove your ability to muscle test (kinesiology). Here's how it works:</p>
+            <li><strong>Purpose:</strong> This site serves two key purposes: 
+                <ol>
+                    <li>Help you improve your muscle testing.</li>
+                    <li>Provide evidence of your proficiency with muscle testing so that when you provide others with a calibration they can trust that it is accurate.</li>
+                    </ol>
+            </li>
+            <li><strong>Take Quizzes:</strong> Each quiz consists of ten statements. The statements themselves are hidden, and your options are simply True or False. Use your muscle testing technique to determine whether each statement is true or false, then select the appropriate button.</li>
+            <li><strong>Statements:</strong> After submitting your quiz, the statements are revealed. You don't need to answer all the statements to submit your quiz. Ten random statements are drawn from a larger pool at the start of each quiz.</li>
+            <li><strong>Types of Statements:</strong> The statements are sourced from the book Truth vs. Falsehood, and I've carefully chosen ones that remain unchanged since the book's release. For example, "Plato calibrates at..." There's a balanced mix of true and false statements.</li>  
+            <li><strong>Track Progress:</strong> Your performance is recorded, allowing you to see your improvement over time and provide people with a level of confidence in your calibrations.</li>
+            
+            <p>Start by clicking the "Take a Quiz" button below to begin!</p>
+        </div>
+
+        <div id="user-info">
+            <p>Loading user information...</p>
+        </div>
+        <div id="quick-stats">
+            <h2>Your Quiz Stats</h2>
+            <p>Loading stats...</p>
+        </div>
+        <div id="recent-activity">
+            <h2>Recent Activity</h2>
+            <p>Loading recent activity...</p>
+        </div>
+        <div class="dashboard-buttons">
+            <button id="quiz-button">Take a Quiz</button>
+            <button id="profile-button">View Profile</button>
+            <button id="logout-button">Quit (Logout)</button>
+        </div>
+    </div>
+    <script src="js/dashboard.js"></script>
+</body>
+</html>

@@ -100,12 +100,20 @@ function displayQuestionPlaceholders() {
         const questionsHTML = currentQuestions.map((_, index) => `
             <li style="list-style-type: none;">
                 <p>Statement ${index + 1}</p>
-                <button class="quiz-button" onclick="answerQuestion(${index}, true)">True</button>
-                <button class="quiz-button" onclick="answerQuestion(${index}, false)">False</button>
+                <button class="quiz-button true-button" data-index="${index}">True</button>
+                <button class="quiz-button false-button" data-index="${index}">False</button>
                 <span class="result-indicator"></span>
             </li>
         `).join('');
         quizContainer.innerHTML = questionsHTML;
+
+        // Add event listeners to the buttons
+        quizContainer.querySelectorAll('.true-button').forEach(button => {
+            button.addEventListener('click', () => answerQuestion(parseInt(button.dataset.index), true));
+        });
+        quizContainer.querySelectorAll('.false-button').forEach(button => {
+            button.addEventListener('click', () => answerQuestion(parseInt(button.dataset.index), false));
+        });
     } else {
         console.error('question-list element not found');
     }

@@ -1,8 +1,27 @@
-console.log('profile.js loaded');
+// Define a debug mode flag (you can set this to false in production)
+const DEBUG_MODE = true;
+
+function secureLog(message, data) {
+    if (DEBUG_MODE) {
+        if (data) {
+            console.log(message, data);
+        } else {
+            console.log(message);
+        }
+    }
+}
+
+function secureError(message, error) {
+    if (DEBUG_MODE) {
+        console.error(message, error);
+    }
+}
+
+secureLog('profile.js loaded');
 
 async function fetchProfileData() {
     try {
-        console.log('Fetching profile data...');
+        secureLog('Fetching profile data...');
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
@@ -16,17 +35,17 @@ async function fetchProfileData() {
 
         if (!response.ok) {
             const errorData = await response.json();
-            console.error('Error response:', errorData);
+            secureError('Error response:', errorData);
             throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.message || 'Unknown error'}`);
         }
         const data = await response.json();
-        console.log('Profile data received:', data);
+        secureLog('Profile data received:', data);
         return data;
     } catch (error) {
         if (error.name === 'AbortError') {
-            console.error('Request timed out');
+            secureError('Request timed out');
         } else {
-            console.error('Error fetching profile data:', error);
+            secureError('Error fetching profile data:', error);
         }
         throw error; // Re-throw the error to be caught in initializeProfile
     }
@@ -44,7 +63,7 @@ function getTrendText(trend) {
 }
 
 function displayProfileData(profileData) {
-    console.log('Displaying profile data:', profileData);
+    secureLog('Displaying profile data:', profileData);
     const profileInfoElement = document.getElementById('profile-info');
     if (profileData) {
         profileInfoElement.innerHTML = `
@@ -60,27 +79,27 @@ function displayProfileData(profileData) {
     } else {
         profileInfoElement.innerHTML = '<p>Error loading profile information. Please try again later.</p>';
     }
-    console.log('Profile data displayed');
+    secureLog('Profile data displayed');
 }
 
 async function initializeProfile() {
-    console.log('Initializing profile...');
+    secureLog('Initializing profile...');
     const profileInfoElement = document.getElementById('profile-info');
     profileInfoElement.innerHTML = '<p id="loading-message">Loading profile data...</p>';
 
     try {
         const profileData = await fetchProfileData();
         if (profileData) {
-            console.log('Profile data fetched successfully');
+            secureLog('Profile data fetched successfully');
             displayProfileData(profileData);
         } else {
             throw new Error('Profile data is null or undefined');
         }
     } catch (error) {
-        console.error('Failed to fetch profile data:', error);
+        secureError('Failed to fetch profile data:', error);
         profileInfoElement.innerHTML = `<p>Failed to load profile data. Error: ${error.message}</p>`;
     }
 }
 
 document.addEventListener('DOMContentLoaded', initializeProfile);
-console.log('Event listener added for DOMContentLoaded');
+secureLog('Event listener added for DOMContentLoaded');

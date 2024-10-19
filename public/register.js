@@ -4,6 +4,13 @@ async function fetchCSRFToken() {
     return data.csrfToken;
 }
 
+function secureLog(message, error) {
+    // In production, this function could be modified to log to a secure service
+    if (process.env.NODE_ENV !== 'production') {
+        console.error(message, error);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const registerForm = document.getElementById('register-form');
 
@@ -37,7 +44,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 alert(`Registration failed: ${data.message}`);
             }
         } catch (error) {
-            console.error('Error during registration:', error);
+            secureLog('Error during registration:', error);
             alert('An error occurred during registration. Please try again.');
         }
     });
