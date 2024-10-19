@@ -55,9 +55,36 @@ function addButtonListeners() {
     }
 }
 
+function fetchDashboardData() {
+    fetch('/api/profile', {
+        method: 'GET',
+        credentials: 'include'
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Update user info
+        document.getElementById('user-info').innerHTML = `
+            <h2>Your Information</h2>
+            <p><strong>Email:</strong> ${data.email}</p>
+            <p><strong>Reddit Handle:</strong> ${data.redditHandle}</p>
+        `;
+
+        // Update quiz stats
+        document.getElementById('total-questions').textContent = data.totalQuestions;
+        document.getElementById('correct-answers').textContent = data.totalCorrect;
+        document.getElementById('quizzes-taken').textContent = data.quizzesTaken;
+        document.getElementById('percent-correct').textContent = data.percentCorrect.toFixed(2) + '%';
+        document.getElementById('rank').textContent = data.rank;
+    })
+    .catch(error => {
+        console.error('Error fetching dashboard data:', error);
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM fully loaded');
     addButtonListeners();
+    fetchDashboardData();
 });
 
 console.log('Script ended');

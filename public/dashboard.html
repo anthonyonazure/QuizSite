@@ -5,39 +5,92 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>User Dashboard</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        .dashboard-container {
+            display: flex;
+            flex-direction: column;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .dashboard-section {
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
         <h1>Welcome to Your Dashboard</h1>
         
-        <div id="site-info">
-            <h2>About Our Quiz Platform</h2>
-            <p>Welcome to our interactive quiz platform designed to test and prove your ability to muscle test (kinesiology). Here's how it works:</p>
-            <li><strong>Purpose:</strong> This site serves two key purposes: 
-                <ol>
-                    <li>Help you improve your muscle testing.</li>
-                    <li>Provide evidence of your proficiency with muscle testing so that when you provide others with a calibration they can trust that it is accurate.</li>
-                    </ol>
-            </li>
-            <li><strong>Take Quizzes:</strong> Each quiz consists of ten statements. The statements themselves are hidden, and your options are simply True or False. Use your muscle testing technique to determine whether each statement is true or false, then select the appropriate button.</li>
-            <li><strong>Statements:</strong> After submitting your quiz, the statements are revealed. You don't need to answer all the statements to submit your quiz. Ten random statements are drawn from a larger pool at the start of each quiz.</li>
-            <li><strong>Types of Statements:</strong> The statements are sourced from the book Truth vs. Falsehood, and I've carefully chosen ones that remain unchanged since the book's release. For example, "Plato calibrates at..." There's a balanced mix of true and false statements.</li>  
-            <li><strong>Track Progress:</strong> Your performance is recorded, allowing you to see your improvement over time and provide people with a level of confidence in your calibrations.</li>
+        <div class="dashboard-container">
+            <div class="dashboard-section" id="user-info">
+                <h2>Your Information</h2>
+                <p>Loading user information...</p>
+            </div>
             
-            <p>Start by clicking the "Take a Quiz" button below to begin!</p>
+            <div class="dashboard-section" id="quick-stats">
+                <h2>Your Quiz Stats</h2>
+                <table>
+                    <tr>
+                        <th>Stat</th>
+                        <th>Value</th>
+                    </tr>
+                    <tr>
+                        <td>Total Questions Answered</td>
+                        <td id="total-questions">Loading...</td>
+                    </tr>
+                    <tr>
+                        <td>Correct Answers</td>
+                        <td id="correct-answers">Loading...</td>
+                    </tr>
+                    <tr>
+                        <td>Quizzes Taken</td>
+                        <td id="quizzes-taken">Loading...</td>
+                    </tr>
+                    <tr>
+                        <td>Percent Correct</td>
+                        <td id="percent-correct">Loading...</td>
+                    </tr>
+                    <tr>
+                        <td>Current Rank</td>
+                        <td id="rank">Loading...</td>
+                    </tr>
+                </table>
+            </div>
+            
+            <div class="dashboard-section" id="site-info">
+                <h2>About Our Quiz Platform</h2>
+                <p>Welcome to our interactive quiz platform designed to test and prove your ability to muscle test (kinesiology). Here's how it works:</p>
+                <ul>
+                    <li><strong>Purpose:</strong> This site serves two key purposes: 
+                        <ol>
+                            <li>Help you improve your muscle testing.</li>
+                            <li>Provide evidence of your proficiency with muscle testing so that when you provide others with a calibration they can trust that it is accurate.</li>
+                        </ol>
+                    </li>
+                    <li><strong>Take Quizzes:</strong> Each quiz consists of ten statements. The statements themselves are hidden, and your options are simply True or False. Use your muscle testing technique to determine whether each statement is true or false, then select the appropriate button.</li>
+                    <li><strong>Statements:</strong> After submitting your quiz, the statements are revealed. You don't need to answer all the statements to submit your quiz. Ten random statements are drawn from a larger pool at the start of each quiz.</li>
+                    <li><strong>Types of Statements:</strong> The statements are sourced from the book Truth vs. Falsehood, and I've carefully chosen ones that remain unchanged since the book's release. For example, "Plato calibrates at..." There's a balanced mix of true and false statements.</li>  
+                    <li><strong>Track Progress:</strong> Your performance is recorded, allowing you to see your improvement over time and provide people with a level of confidence in your calibrations.</li>
+                </ul>
+            </div>
         </div>
-
-        <div id="user-info">
-            <p>Loading user information...</p>
-        </div>
-        <div id="quick-stats">
-            <h2>Your Quiz Stats</h2>
-            <p>Loading stats...</p>
-        </div>
-        <div id="recent-activity">
-            <h2>Recent Activity</h2>
-            <p>Loading recent activity...</p>
-        </div>
+        
         <div class="dashboard-buttons">
             <button id="quiz-button">Take a Quiz</button>
             <button id="profile-button">View Profile</button>
