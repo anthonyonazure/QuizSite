@@ -85,14 +85,16 @@ app.use(session({
   cookie: { secure: process.env.NODE_ENV === 'production' }
 }));
 
-// CSRF protection
-app.use(csrf({ 
-  cookie: true,
-  ignoreMethods: ['GET', 'HEAD', 'OPTIONS'],
-  value: (req) => {
-    return req.headers['x-csrf-token'];
+const csrfProtection = csrf({ cookie: true });
+
+// Apply CSRF protection to all routes except /api/logout
+app.use((req, res, next) => {
+  if (req.path === '/api/logout') {
+    next();
+  } else {
+    csrfProtection(req, res, next);
   }
-}));
+});
 
 // Add middleware to handle CSRF errors
 app.use((err, req, res, next) => {
@@ -228,19 +230,22 @@ app.post('/api/register', async (req, res) => {
 });
 
 // Logout route
-app.post('/api/logout', csrf({ ignoreMethods: ['POST'] }), (req, res) => {
+app.post('/api/logout', (req, res) => {
+  console.log('Logout route accessed');
+  console.log('Session before destroy:', req.session);
   req.session.destroy((err) => {
     if (err) {
       console.error('Error destroying session:', err);
       return res.status(500).json({ message: 'Error logging out' });
     }
+    console.log('Session destroyed successfully');
     res.clearCookie('connect.sid');
     res.json({ message: 'Logged out successfully' });
   });
 });
 
 // Updated CSRF token route
-app.get('/api/csrf-token', (req, res) => {
+app.get('/api/csrf-token', csrfProtection, (req, res) => {
   const token = req.csrfToken();
   res.cookie('XSRF-TOKEN', token);
   res.json({ csrfToken: token });

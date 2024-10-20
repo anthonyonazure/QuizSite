@@ -212,13 +212,8 @@ function showResult() {
 
 async function handleLogout() {
     try {
-        const csrfToken = await fetchCSRFToken();
         const response = await fetch('/api/logout', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': csrfToken
-            },
             credentials: 'include'
         });
 
@@ -227,9 +222,11 @@ async function handleLogout() {
             window.location.href = '/login.html';
         } else {
             console.error('Logout failed');
+            alert('Logout failed. Please try again.');
         }
     } catch (error) {
         console.error('Error during logout:', error);
+        alert('An error occurred during logout. Please try again.');
     }
 }
 

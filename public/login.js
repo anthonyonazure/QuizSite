@@ -1,3 +1,5 @@
+const notification = document.getElementById('login-notification');
+
 function secureLog() {}
 function secureError() {}
 function secureWarn() {}
@@ -43,8 +45,8 @@ async function handleLogin(event) {
                 'Content-Type': 'application/json',
                 'X-CSRF-Token': csrfToken
             },
-            body: JSON.stringify({ username, password }),
-            credentials: 'include'
+            credentials: 'include',
+            body: JSON.stringify({ username, password })
         });
 
         secureLog('Login response status:', response.status);
@@ -59,6 +61,7 @@ async function handleLogin(event) {
         } else {
             const errorData = await response.json();
             secureError('Login failed:', errorData);
+            showNotification('An error occurred. Please try again later.', 'error');
             document.getElementById('error-message').textContent = errorData.message;
         }
     } catch (error) {
@@ -138,4 +141,14 @@ async function updateLeaderboard() {
     } catch (error) {
         secureError('Error updating leaderboard:', error);
     }
+}
+
+function showNotification(message, type) {
+    notification.textContent = message;
+    notification.className = `notification ${type}`;
+    notification.style.display = 'block';
+
+    setTimeout(() => {
+        notification.style.display = 'none';
+    }, 5000);
 }
