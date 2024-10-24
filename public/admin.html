@@ -12,8 +12,8 @@
         <div id="admin-content" style="display: none;">
             <nav>
                 <ul>
+                    <li><a href="question-admin.html">Manage Questions</a></li>
                     <li><a href="manage_users.html">Manage Users</a></li>
-                    <li><a href="manage_questions.html">Manage Questions</a></li>
                 </ul>
             </nav>
             <a href="Frontend.html">Back to Quiz</a>
@@ -23,29 +23,6 @@
             <a href="login.html">Login</a>
         </div>
     </div>
-    <script>
-        async function checkAdminStatus() {
-            try {
-                const response = await fetch('/api/check-admin', {
-                    method: 'GET',
-                    credentials: 'include'
-                });
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const data = await response.json();
-                if (data.isAdmin) {
-                    document.getElementById('admin-content').style.display = 'block';
-                } else {
-                    document.getElementById('login-message').style.display = 'block';
-                }
-            } catch (error) {
-                console.error('Error checking admin status:', error);
-                document.getElementById('login-message').style.display = 'block';
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded', checkAdminStatus);
-    </script>
+    <script src="js/admin.js"></script>
 </body>
 </html>
